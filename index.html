@@ -8,41 +8,63 @@
   <meta name="theme-color" content="#111111"/>
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <!-- Map libraries -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <link rel="stylesheet" href="assets/style.css"/>
 </head>
 <body>
   <header class="topbar">
-    <button class="hamb" onclick="toggleDrawer()" aria-label="Menu">
-      <span></span><span></span><span></span>
-    </button>
+    <button class="hamb" onclick="toggleDrawer()" aria-label="Menu"><span></span><span></span><span></span></button>
     <h1>Cascade Canvass</h1>
   </header>
 
   <aside id="drawer" class="drawer" aria-hidden="true">
     <header>Menu</header>
-    <nav>
-      <a href="#" onclick="nav('dashboard')">Dashboard</a>
-      <a href="#" onclick="nav('map')">Map / Turf</a>
-      <a href="#" onclick="nav('knock')">Next Door</a>
-      <a href="#" onclick="nav('lead')">New Lead</a>
-      <a href="#" onclick="nav('scripts')">Scripts</a>
-      <a href="#" onclick="nav('settings')">Settings</a>
+    <nav class="nav">
+      <a href="#" onclick="nav('dashboard')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" onclick="nav('map')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l7-3 7 3 4-2v14l-7 3-7-3-4 2V6"/><path d="M10 3v18M17 5v16"/></svg>
+        <span>Map / Turf</span>
+      </a>
+      <a href="#" onclick="nav('knock')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10h8M8 14h5"/><path d="M4 4h16v16H4z"/></svg>
+        <span>Next Door</span>
+      </a>
+      <a href="#" onclick="nav('lead')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9-9 4.03-9 9 4.03 9 9 9z"/><path d="M12 7v6l4 2"/></svg>
+        <span>New Lead</span>
+      </a>
+      <a href="#" onclick="nav('scripts')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg>
+        <span>Scripts</span>
+      </a>
+      <a href="#" onclick="nav('settings')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 3.4 19.4l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 6.04 3.4l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 20.6 6.04l-.06.06a1.65 1.65 0 0 0-.33 1.82V8c0 .66.39 1.26 1 1.51.16.07.33.11.51.11H22a2 2 0 1 1 0 4h-.09c-.18 0-.35.04-.51.11a1.65 1.65 0 0 0-1 1.51z"/></svg>
+        <span>Settings</span>
+      </a>
     </nav>
   </aside>
 
   <main id="view"></main>
   <footer class="foot"><small>Installable PWA • Endpoint: <span id="ep" class="mono"></span></small></footer>
 
+  <!-- Toasts -->
+  <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Map libs -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+  <!-- App -->
   <script src="assets/app.js"></script>
   <script>
     function toggleDrawer(){
-      const d = document.getElementById('drawer');
-      d.classList.toggle('open');
-      d.setAttribute('aria-hidden', !d.classList.contains('open'));
+      const d=document.getElementById('drawer');
+      d.classList.toggle('open'); d.setAttribute('aria-hidden', !d.classList.contains('open'));
     }
     function nav(tab){ toggleDrawer(); go(tab); }
 
