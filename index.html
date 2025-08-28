@@ -1,27 +1,56 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cascade Canvass (Scripts Enabled)</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#111111" />
-  <link rel="icon" href="icons/favicon.png">
-  <link rel="stylesheet" href="assets/style.css">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cascade Canvass — Full PWA</title>
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <meta name="theme-color" content="#111111"/>
+  <link rel="icon" href="icons/favicon.png"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+  <link rel="stylesheet" href="assets/style.css"/>
 </head>
 <body>
-  <header class="card" style="margin:0 0 1rem 0;border-radius:0">
-    <h1 style="margin:.2rem 0">Cascade Canvass — FULL BUILD ✅ + Scripts</h1>
-    <nav>
-      <button onclick="tab('dashboard')">Dashboard</button>
-      <button onclick="tab('scripts')">Scripts</button>
-      <button onclick="tab('knock')">Next Door</button>
-      <button onclick="tab('lead')">New Lead</button>
-      <button onclick="tab('settings')">Settings</button>
-    </nav>
+  <header class="topbar">
+    <button class="hamb" onclick="toggleDrawer()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <h1>Cascade Canvass</h1>
   </header>
-  <main id="view" class="card"></main>
-  <footer class="card"><small>Endpoint: <span id="ep"></span></small></footer>
-  <script src="assets/scripts.js"></script>
+
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <header>Menu</header>
+    <nav>
+      <a href="#" onclick="nav('dashboard')">Dashboard</a>
+      <a href="#" onclick="nav('map')">Map / Turf</a>
+      <a href="#" onclick="nav('knock')">Next Door</a>
+      <a href="#" onclick="nav('lead')">New Lead</a>
+      <a href="#" onclick="nav('scripts')">Scripts</a>
+      <a href="#" onclick="nav('settings')">Settings</a>
+    </nav>
+  </aside>
+
+  <main id="view"></main>
+  <footer class="foot"><small>Installable PWA • Endpoint: <span id="ep" class="mono"></span></small></footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="assets/app.js"></script>
+  <script>
+    function toggleDrawer(){
+      const d = document.getElementById('drawer');
+      d.classList.toggle('open');
+      d.setAttribute('aria-hidden', !d.classList.contains('open'));
+    }
+    function nav(tab){ toggleDrawer(); go(tab); }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () =>
+        navigator.serviceWorker.register('./sw.js').catch(console.error)
+      );
+    }
+  </script>
 </body>
 </html>
