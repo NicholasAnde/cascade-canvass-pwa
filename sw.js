@@ -1,5 +1,5 @@
 // Basic offline-first service worker with cache version bumping
-const CACHE = 'canvass-v10';
+const CACHE = 'canvass-v12';
 const ASSETS = [
   './',
   './index.html',
