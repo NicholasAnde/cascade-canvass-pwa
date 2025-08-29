@@ -1,6 +1,1 @@
-{
-  "sheetsEndpoint": "https://script.google.com/macros/s/REPLACE_WITH_YOUR_EXEC/exec",
-  "cooldownDays": 90,
-  "sharedSecret": "CHANGE_ME",
-  "emailNotifyTo": "nicholasande@gmail.com"
-}
+{"sheetsEndpoint": "https://script.google.com/macros/s/REPLACE_WITH_YOUR_EXEC/exec", "cooldownDays": 90, "sharedSecret": "CHANGE_ME", "emailNotifyTo": "nicholasande@gmail.com"}
