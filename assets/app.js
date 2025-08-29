@@ -223,18 +223,32 @@ async function refreshCache(){
 async function retryQueue(){
   if(!S.queue.length) return;
   const q=[...S.queue]; S.queue=[]; saveLS();
-  for(const it of q){
+  let sent=0, failed=0, lastErr='';
+  for(const item of q){
+    // ⬅ inject current secret/email onto every queued payload before POST
+    item.secret = S.secret;
+    item.emailNotifyTo = S.emailNotifyTo;
+
     try{
-      const r = await fetch(S.endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(it)});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-    }catch(e){ S.queue.push(it); }
+      const r = await fetch(S.endpoint, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(item)
+      });
+      if(!r.ok) { failed++; lastErr = 'HTTP '+r.status; throw new Error(lastErr); }
+      sent++;
+    }catch(e){
+      // keep the data—requeue it
+      S.queue.push(item);
+      lastErr = String(e && e.message || e || 'send failed');
+    }
   }
   saveLS();
-  if(q.length){
-    const sent = q.length - S.queue.length;
-    if (sent>0) showToast(`Synced ${sent} item${sent>1?'s':''} ✓`,'success');
-    if (S.queue.length>0) showToast(`${S.queue.length} item${S.queue.length>1?'s':''} still queued`,'info');
-  }
+
+  if(sent) showToast(`Synced ${sent} item${sent>1?'s':''} ✓`,'success');
+  if(failed) showToast(`${failed} still queued (${lastErr})`,'info');
+}
+
 }
 function saveAdminConfig(){
   const s = (el('#adm_secret').value||'').trim();
