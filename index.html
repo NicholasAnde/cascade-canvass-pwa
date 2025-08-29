@@ -1,51 +1,176 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Cascade Canvass — PWA</title>
-  <link rel="manifest" href="manifest.webmanifest"/>
-  <meta name="theme-color" content="#111111"/>
-  <link rel="icon" href="icons/favicon.png"/>
-  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
-  <link rel="stylesheet" href="assets/style.css"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/favicon.png">
+  <title>Cascade Canvass PWA</title>
+  <meta name="theme-color" content="#0b0d10">
+  <link rel="stylesheet" href="./assets/style.css">
 </head>
-<body>
-  <header class="topbar">
-    <button class="hamb" onclick="toggleDrawer()" aria-label="Menu"><span></span><span></span><span></span></button>
-    <h1>Cascade Canvass</h1>
+<body class="dark">
+  <header class="app-header">
+    <div class="hamburger" id="menuBtn">☰</div>
+    <div class="brand">Cascade Canvass</div>
+    <div class="sync-badge" id="syncBadge" title="Queue status" style="display:none">⟳ <span id="syncCount">0</span></div>
   </header>
 
-  <aside id="drawer" class="drawer" aria-hidden="true">
-    <header>Menu</header>
-    <nav class="nav">
-      <a href="#" onclick="nav('dashboard')">Home</a>
-      <a href="#" onclick="nav('knock')">Next Door</a>
-      <a href="#" onclick="nav('lead')">New Lead</a>
-      <a href="#" onclick="nav('tracker')">Lead Tracker</a>
-      <a href="#" onclick="nav('scripts')">Scripts</a>
-      <a href="#" onclick="nav('settings')">Settings</a>
+  <div class="container">
+    <nav class="nav card" id="navMenu">
+      <a href="#home" class="btn ghost" data-nav>Home</a>
+      <a href="#next" class="btn ghost" data-nav>Next Door</a>
+      <a href="#new" class="btn primary" data-nav>New Lead</a>
+      <a href="#tracker" class="btn ghost" data-nav>Lead Tracker</a>
+      <a href="#scripts" class="btn ghost" data-nav>Scripts</a>
+      <a href="#settings" class="btn ghost" data-nav>Settings</a>
     </nav>
-  </aside>
 
-  <main id="view"></main>
-  <footer class="foot"><small>Installable PWA</small></footer>
+    <section class="card" id="view-home">
+      <h2>Welcome</h2>
+      <p>Capture leads quickly, even offline. Photos queue and sync when back online.</p>
+      <div class="actions">
+        <a class="btn primary" data-nav href="#new">New Lead</a>
+        <a class="btn" data-nav href="#tracker">Lead Tracker</a>
+      </div>
+    </section>
 
-  <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
-  <div id="err" class="err" style="display:none"></div>
+    <section class="card hidden" id="view-next">
+      <h2>Next Door</h2>
+      <p>Geocoder & routing placeholder (kept minimal in v1.16). Use <b>New Lead</b> to capture now.</p>
+      <div class="actions">
+        <button class="btn" id="btnReloadNearby">Reload Nearby</button>
+        <button class="btn" id="btnSkipDoor">Skip Door</button>
+        <button class="btn" id="btnNextClosest">Next Closest</button>
+      </div>
+      <div id="nextOutput" style="margin-top:10px;color:var(--muted)"></div>
+    </section>
 
+    <section class="card hidden" id="view-new">
+      <h2>New Lead</h2>
+      <form id="leadForm">
+        <div class="row two">
+          <div>
+            <label>Name</label>
+            <input class="input" type="text" id="name" required>
+          </div>
+          <div>
+            <label>Phone</label>
+            <input class="input" type="tel" id="phone">
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>Email</label>
+            <input class="input" type="email" id="email">
+          </div>
+          <div>
+            <label>Rep Name</label>
+            <input class="input" type="text" id="rep">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Address</label>
+            <input class="input" type="text" id="address">
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>Service Urgency</label>
+            <select id="urgency">
+              <option value="Low">Low</option>
+              <option value="Normal" selected>Normal</option>
+              <option value="High">High</option>
+              <option value="Emergency">Emergency</option>
+            </select>
+          </div>
+          <div>
+            <label>Timeline</label>
+            <select id="timeline">
+              <option>ASAP</option>
+              <option>1–2 weeks</option>
+              <option>30–60 days</option>
+              <option>60+ days</option>
+            </select>
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>Budget</label>
+            <input class="input" type="text" id="budget" placeholder="$">
+          </div>
+          <div>
+            <label>Notes</label>
+            <input class="input" type="text" id="notes" placeholder="Optional notes">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Photos (up to 5)</label>
+            <input class="input" type="file" id="photos" accept="image/*" capture="environment" multiple>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn primary">Save Lead</button>
+          <button type="button" id="clearForm" class="btn">Clear</button>
+        </div>
+      </form>
+      <div id="leadConfirm" class="card hidden"></div>
+    </section>
+
+    <section class="card hidden" id="view-tracker">
+      <h2>Lead Tracker (Local)</h2>
+      <div id="trackerList"></div>
+    </section>
+
+    <section class="card hidden" id="view-scripts">
+      <h2>Scripts</h2>
+      <div id="scriptsContainer">Loading scripts…</div>
+    </section>
+
+    <section class="card hidden" id="view-settings">
+      <h2>Settings</h2>
+      <div class="row two">
+        <div>
+          <label>Rep Name</label>
+          <input class="input" id="settingsRep" placeholder="Your name">
+        </div>
+        <div>
+          <label>Theme</label>
+          <select id="theme">
+            <option value="dark">Dark</option>
+            <option value="light">iOS Light</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Offline Queue</h3>
+        <div class="actions">
+          <button class="btn" id="retryQueue">Retry Sync</button>
+          <button class="btn danger" id="clearQueue">Clear Queue</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="queuePanel" class="queue-panel hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <b>Pending Uploads</b>
+      <button class="btn" id="closeQueue">Close</button>
+    </div>
+    <div id="queueItems"></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="./assets/app.js"></script>
   <script>
-    function toggleDrawer(){
-      const d=document.getElementById('drawer');
-      d.classList.toggle('open'); d.setAttribute('aria-hidden', !d.classList.contains('open'));
-    }
-    function nav(tab){ toggleDrawer(); if(window.go) go(tab); }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(()=>{});
-    }
-    window.addEventListener('error', e=>{ const box=document.getElementById('err'); box.style.display='block'; box.textContent = 'JS Error: '+(e.message||e.error||e); });
-    document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
   </script>
-  <script src="assets/app.js"></script>
 </body>
 </html>
