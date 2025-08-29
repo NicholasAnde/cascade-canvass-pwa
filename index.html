@@ -12,6 +12,15 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <link rel="stylesheet" href="assets/style.css"/>
 </head>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      for (const reg of regs) reg.unregister();
+    }).catch(()=>{});
+  }
+</script>
+  
 <body>
   <header class="topbar">
     <button class="hamb" onclick="toggleDrawer()" aria-label="Menu"><span></span><span></span><span></span></button>
