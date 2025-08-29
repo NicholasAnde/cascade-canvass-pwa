@@ -1,21 +1,18 @@
-// Cascade Canvass — Stable Full (geocode + loop + clear-queue + map quick‑log)
+// Hamburger + Frontend-only build (no backend; local saves + CSV export)
 
 const S = {
   rep: localStorage.getItem('rep') || '',
-  endpoint: null,
-  cooldownDays: 90,
   visitsLog: JSON.parse(localStorage.getItem('visitsLog') || '[]'),
   leadsLog: JSON.parse(localStorage.getItem('leadsLog') || '[]'),
-  queue: JSON.parse(localStorage.getItem('queue') || '[]'),
-  secret: '', emailNotifyTo: '',
-  map:null, drawn:null, drawnLayer:null, markers: []
+  scriptStats: JSON.parse(localStorage.getItem('scriptStats') || '{}'),
+  map:null, drawn:null, markers:[]
 };
 
 const el = s => document.querySelector(s);
 function saveLS(){
   localStorage.setItem('visitsLog', JSON.stringify(S.visitsLog));
   localStorage.setItem('leadsLog', JSON.stringify(S.leadsLog));
-  localStorage.setItem('queue', JSON.stringify(S.queue));
+  localStorage.setItem('scriptStats', JSON.stringify(S.scriptStats));
 }
 function showToast(message, type='success'){
   const root = el('#toast-root'); if(!root) return alert(message);
@@ -27,35 +24,15 @@ function showToast(message, type='success'){
   div.querySelector('.close').onclick = close;
   setTimeout(close, type==='error' ? 4200 : 2400);
 }
-function setActiveTab(tab){
-  document.querySelectorAll('.tabs [data-tab]').forEach(b=>b.classList.toggle('active', b.getAttribute('data-tab')===tab));
-}
-async function swapView(renderFn, tab){
-  const v = el('#view'); if(!v){ renderFn(); return; }
-  v.classList.add('view-exit'); await new Promise(r=>setTimeout(r,120));
-  renderFn();
-  requestAnimationFrame(()=>{ v.classList.remove('view-exit'); v.classList.add('view-enter'); setTimeout(()=>v.classList.remove('view-enter'),180); });
-  if(tab) setActiveTab(tab);
-}
 function go(tab){
-  const routes = {dashboard:renderDashboard, knock:renderKnock, lead:renderLead, map:renderMapView, settings:renderSettings};
-  const fn = routes[tab] || renderDashboard;
-  swapView(fn, tab);
+  if(tab==='dashboard') return renderDashboard();
+  if(tab==='knock') return renderKnock();
+  if(tab==='lead') return renderLead();
+  if(tab==='map') return renderMapView();
+  if(tab==='scripts') return renderScripts();
+  if(tab==='settings') return renderSettings();
+  renderDashboard();
 }
-
-async function boot(){
-  try{
-    const cfg = await fetch('./app.settings.json').then(r=>r.json());
-    S.endpoint = cfg.sheetsEndpoint; S.cooldownDays = cfg.cooldownDays || 90;
-    S.secret = cfg.sharedSecret || ''; S.emailNotifyTo = cfg.emailNotifyTo || '';
-    const so = localStorage.getItem('secretOverride'); const eo = localStorage.getItem('emailOverride');
-    if (so) S.secret = so; if (eo) S.emailNotifyTo = eo;
-    el('#ep').textContent = S.endpoint || '(none)';
-  }catch(e){ el('#ep').textContent = '(endpoint not loaded)'; }
-  window.addEventListener('online', retryQueue);
-  setInterval(retryQueue, 45000);
-}
-window.addEventListener('load', boot);
 
 // CSV helpers
 function toCSV(rows){
@@ -70,39 +47,25 @@ function downloadCSV(name, rows){
   a.download = name; a.click();
 }
 
-// Reverse geocode (Nominatim) with gentle rate-limit
-let _lastRG = 0;
-async function reverseGeocode(lat,lng){
-  try{
-    const now = Date.now();
-    if (now - _lastRG < 1200) await new Promise(r=>setTimeout(r, 1200-(now-_lastRG)));
-    _lastRG = Date.now();
-    const u = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`;
-    const j = await fetch(u,{headers:{'Accept':'application/json','User-Agent':'Cascade-Canvass-PWA'}}).then(r=>r.json());
-    return j.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }catch(e){
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
-}
-
-// Views
+// Dashboard
 function renderDashboard(){
   el('#view').innerHTML = `
   <section class="card">
-    <h2>Dashboard</h2>
+    <h2>Home</h2>
     <div class="tiles" style="margin-top:.6rem">
-      <div class="tile primary" onclick="go('knock')"><div class="big">Next Door</div><div class="sub">Knock & log quickly</div></div>
-      <div class="tile primary" onclick="go('lead')"><div class="big">New Lead</div><div class="sub">Details & photos</div></div>
+      <div class="tile" onclick="go('knock')"><div class="big">Next Door</div><div class="sub">Knock & log quickly</div></div>
+      <div class="tile" onclick="go('lead')"><div class="big">New Lead</div><div class="sub">Details & photos</div></div>
       <div class="tile" onclick="go('map')"><div class="big">Map / Turf</div><div class="sub">Plan & export</div></div>
-      <div class="tile" onclick="go('settings')"><div class="big">Settings</div><div class="sub">Prefs & Admin</div></div>
+      <div class="tile" onclick="go('scripts')"><div class="big">Scripts</div><div class="sub">Openers & rebuttals</div></div>
+      <div class="tile" onclick="go('settings')"><div class="big">Settings</div><div class="sub">Prefs & exports</div></div>
     </div>
     <div class="btn-row" style="margin-top:1rem">
       <button class="ghost" onclick="downloadCSV('visits.csv', S.visitsLog)">Export Visits</button>
     </div>
-    <p class="mono" style="opacity:.7;margin-top:.5rem">Offline queue: ${S.queue.length}</p>
   </section>`;
 }
 
+// Next Door (local save)
 function renderKnock(){
   el('#view').innerHTML = `
   <section class="card">
@@ -120,6 +83,20 @@ function renderKnock(){
     </div>
   </section>`;
 }
+
+let _lastRG = 0;
+async function reverseGeocode(lat,lng){
+  try{
+    const now = Date.now();
+    if (now - _lastRG < 1200) await new Promise(r=>setTimeout(r, 1200-(now-_lastRG)));
+    _lastRG = Date.now();
+    const u = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`;
+    const j = await fetch(u,{headers:{'Accept':'application/json','User-Agent':'Cascade-Canvass-PWA'}}).then(r=>r.json());
+    return j.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }catch(e){
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+}
 function autoFillAddressFromGPS(){
   if(!navigator.geolocation){ showToast('Geolocation not available','error'); return; }
   navigator.geolocation.getCurrentPosition(async pos=>{
@@ -134,7 +111,7 @@ function openObjection(){
   const o = prompt('Objection: Renter / Already have someone / Too Busy / Cost / Later / Other','Renter');
   if(!o) return; postVisit('Objection', o);
 }
-async function postVisit(outcome, objection=''){
+function postVisit(outcome, objection=''){
   const addr = (el('#k_addr').value||'').trim();
   const notes = (el('#k_notes').value||'').trim();
   if(!addr){ showToast('Address is required.','error'); el('#k_addr').focus(); return; }
@@ -146,22 +123,14 @@ async function postVisit(outcome, objection=''){
     service:'', urgency:'', timeline:'', budget:'',
     notes, turf:'', source:'PWA', rep:S.rep||'',
     outcome: outcome==='Lead'? undefined : outcome,
-    objection: objection||'',
-    secret: S.secret, emailNotifyTo: S.emailNotifyTo
+    objection: objection||''
   };
-  try{
-    const r = await fetch(S.endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(item)});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    showToast('Visit saved ✓','success');
-  }catch(e){
-    S.queue.push(item); saveLS();
-    showToast('Offline: visit queued','info');
-  }
   S.visitsLog.push(item); saveLS();
+  showToast((outcome==='Lead'?'Lead':'Visit')+' saved locally ✓','success');
   if(outcome==='Lead') go('lead');
 }
 
-// Lead with photos
+// Lead (local save + photos)
 function readFilesAsBase64Limited(input, max=3, maxW=1280){
   const files = Array.from(input.files||[]).slice(0,max);
   const out = [];
@@ -238,12 +207,13 @@ async function saveLead(){
     timeline:el('#l_timeline').value,
     budget:el('#l_budget').value,
     notes:(el('#l_notes').value||'').trim(),
-    turf:'', source:'PWA', rep:S.rep||'',
-    photos:[]
+    photos:[],
+    rep:S.rep||'',
+    source:'PWA'
   };
   if(!b.name){ showToast('Please enter the contact name.','error'); el('#l_name').focus(); return; }
   const e164 = toE164(b.phone);
-  if(!e164 || !validE164(e164)){ showToast('Enter a valid phone (US 10-digit or +country).','error'); el('#l_phone').focus(); return; }
+  if(!e164 || !validE164(e164)){ showToast('Enter a valid phone','error'); el('#l_phone').focus(); return; }
   b.phone = e164;
 
   const input = el('#l_photos');
@@ -251,19 +221,11 @@ async function saveLead(){
     try{ b.photos = await readFilesAsBase64Limited(input,3,1280); }catch(e){}
   }
 
-  const payload = { ...b, secret: S.secret, emailNotifyTo: S.emailNotifyTo };
-  try{
-    const r = await fetch(S.endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    showToast('Lead saved ✓','success');
-  }catch(e){
-    S.queue.push(payload); saveLS();
-    showToast('Offline: lead queued','info');
-  }
-  S.leadsLog.push(payload); saveLS();
+  S.leadsLog.push(b); saveLS();
+  showToast('Lead saved locally ✓','success');
 }
 
-// Settings
+// Settings (frontend only)
 function renderSettings(){
   el('#view').innerHTML = `
   <section class="card">
@@ -275,73 +237,79 @@ function renderSettings(){
       <button class="primary" onclick="savePrefs()">Save</button>
       <button class="ghost" onclick="downloadCSV('leads.csv', S.leadsLog)">Export Leads</button>
       <button class="ghost" onclick="refreshCache()">Refresh Offline Cache</button>
-      <button class="ghost" onclick="retryQueue()">Retry Offline Queue (${S.queue.length})</button>
-      <button class="ghost" onclick="clearQueue()">Clear Queue</button>
-      <button class="ghost" onclick="toggleAdmin()">Admin</button>
-    </div>
-    <p class="mono" style="margin-top:.5rem;">Endpoint: ${S.endpoint||'(not loaded)'} • Email: ${S.emailNotifyTo||'—'}</p>
-
-    <div id="admin" class="card" style="display:none;margin-top:1rem">
-      <h3>Admin</h3>
-      <div class="row">
-        <div><label>Shared Secret (local override)</label><input id="adm_secret" value="${S.secret||''}" placeholder="CHANGE_ME"></div>
-        <div><label>Lead Email To (local override)</label><input id="adm_email" value="${S.emailNotifyTo||''}" placeholder="you@example.com"></div>
-      </div>
-      <div class="btn-row" style="margin-top:.6rem">
-        <button class="primary" onclick="saveAdmin()">Save Overrides</button>
-        <button class="ghost" onclick="clearAdmin()">Clear Overrides</button>
-        <button class="ghost" onclick="testPost()">Test POST</button>
-      </div>
-      <p class="mono" id="adm_msg"></p>
     </div>
   </section>`;
 }
-function toggleAdmin(){ const a=el('#admin'); if(a) a.style.display = a.style.display==='none' ? 'block' : 'none'; }
-function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep){ S.rep=rep; localStorage.setItem('rep', rep); } showToast('Preferences saved ✓','success'); go('dashboard'); }
-async function refreshCache(){ if('caches' in window){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); location.reload(); } }
-
-async function retryQueue(){
-  if(!S.queue.length) return;
-  const q=[...S.queue]; S.queue=[]; saveLS();
-  let sent=0, failed=0, lastErr='';
-  for(const item of q){
-    item.secret = S.secret; item.emailNotifyTo = S.emailNotifyTo;
-    try{
-      const r = await fetch(S.endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(item)});
-      if(!r.ok){ failed++; lastErr='HTTP '+r.status; throw new Error(lastErr); }
-      sent++;
-    }catch(e){
-      S.queue.push(item); lastErr = String(e?.message||e||'send failed');
-    }
+function savePrefs(){
+  const rep = (el('#s_rep').value||'').trim();
+  if(rep){ S.rep=rep; localStorage.setItem('rep', rep); }
+  showToast('Preferences saved ✓','success');
+}
+async function refreshCache(){
+  if('caches' in window){
+    const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k)));
+    location.reload();
   }
-  saveLS();
-  if(sent) showToast(`Synced ${sent} ✓`,'success');
-  if(failed) showToast(`${failed} still queued (${lastErr})`,'info');
-}
-function clearQueue(){
-  const n = S.queue.length;
-  if(!n) { showToast('Queue already empty','info'); return; }
-  if(!confirm(`Permanently discard ${n} queued item(s)?`)) return;
-  S.queue = []; saveLS(); showToast('Queue cleared','success');
-}
-function saveAdmin(){ const s=(el('#adm_secret').value||'').trim(); const e=(el('#adm_email').value||'').trim();
-  if(s){ localStorage.setItem('secretOverride', s); S.secret=s; }
-  if(e){ localStorage.setItem('emailOverride', e); S.emailNotifyTo=e; }
-  showToast('Overrides saved','success'); el('#adm_msg').textContent='Overrides saved locally.';
-}
-function clearAdmin(){ localStorage.removeItem('secretOverride'); localStorage.removeItem('emailOverride'); el('#adm_msg').textContent='Overrides cleared. Reload app for file config.'; }
-async function testPost(){
-  if(!S.endpoint){ el('#adm_msg').textContent='No endpoint configured.'; return; }
-  const payload={ type:'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(), address:'TEST ADDRESS',
-    notes:'(test payload)', outcome:'No Answer', source:'PWA', rep:S.rep||'', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
-  try{
-    const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    el('#adm_msg').textContent = r.ok ? 'Test POST ok ✓' : ('HTTP '+r.status);
-    showToast(r.ok?'Test POST ok ✓':'Test POST failed', r.ok?'success':'error');
-  }catch(e){ el('#adm_msg').textContent=String(e); showToast('Test POST failed','error'); }
 }
 
-// Map / Turf with loop + quick‑log
+// Scripts (cues + A/B counters, local only)
+async function renderScripts(){
+  const data = await fetch('assets/scripts.json').then(r=>r.json());
+  const seasons = Object.keys(data.seasons);
+  const audiences = Object.keys(data.audience);
+  const locales = Object.keys(data.localCues);
+
+  el('#view').innerHTML = `
+    <section class="card">
+      <h2>Scripts</h2>
+      <div class="row">
+        <div><label>Season Cue</label><select id="sc_season">${seasons.map(s=>`<option>${s}</option>`).join('')}</select></div>
+        <div><label>Audience Cue</label><select id="sc_aud">${audiences.map(s=>`<option>${s}</option>`).join('')}</select></div>
+        <div><label>Local Cue</label><select id="sc_loc">${locales.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="card" style="margin-top:.75rem">
+        <p><b>Opener</b> — ${data.core.opener}</p>
+        <p><b>Ask</b> — ${data.core.ask}</p>
+        <p><b>Close</b> — ${data.core.close}</p>
+        <p class="mono" id="sc_preview"></p>
+      </div>
+      <div class="card">
+        <h3>Rebuttals (A/B)</h3>
+        ${Object.entries(data.rebuttals).map(([k,v])=>`
+          <div style="margin:.35rem 0">
+            <b>${k}</b>
+            <div class="btn-row" style="margin-top:.35rem">
+              <button class="ghost" data-k="${k}" data-v="A">Use A</button>
+              <span class="badge">A ${S.scriptStats[`${k}__A`]||0}</span>
+              <button class="ghost" data-k="${k}" data-v="B">Use B</button>
+              <span class="badge">B ${S.scriptStats[`${k}__B`]||0}</span>
+            </div>
+            <div class="mono" style="opacity:.8">A: ${v.A}<br/>B: ${v.B}</div>
+          </div>`).join('')}
+      </div>
+    </section>
+  `;
+
+  function updatePreview(){
+    const s = el('#sc_season').value, a = el('#sc_aud').value, l = el('#sc_loc').value;
+    el('#sc_preview').textContent = [data.seasons[s], data.audience[a], data.localCues[l]].filter(Boolean).join(' ');
+  }
+  ['sc_season','sc_aud','sc_loc'].forEach(id => el('#'+id).addEventListener('change', updatePreview));
+  updatePreview();
+
+  el('#view').querySelectorAll('button[data-k]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const k = btn.getAttribute('data-k');
+      const v = btn.getAttribute('data-v');
+      const key = `${k}__${v}`;
+      S.scriptStats[key] = (S.scriptStats[key]||0) + 1;
+      saveLS();
+      renderScripts();
+    });
+  });
+}
+
+// Map / Turf (loop + quick-log) — local only
 function renderMapView(){
   el('#view').innerHTML = `
   <section class="card">
@@ -360,121 +328,66 @@ function renderMapView(){
   if(!S.map){
     S.map = L.map('map');
     S.map.setView([45.6387,-122.6615], 12);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(S.map);
-
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(S.map);
     S.drawn = new L.FeatureGroup(); S.map.addLayer(S.drawn);
-    const draw = new L.Control.Draw({
-      edit: { featureGroup: S.drawn },
-      draw: { circle:false, circlemarker:false }
-    });
+    const draw = new L.Control.Draw({ edit:{featureGroup:S.drawn}, draw:{ circle:false, circlemarker:false } });
     S.map.addControl(draw);
+    S.map.on(L.Draw.Event.CREATED, e=>{ const layer=e.layer; layer.options.color='#6cb3ff'; S.drawn.addLayer(layer); });
+  } else { S.map.invalidateSize(); }
 
-    S.map.on(L.Draw.Event.CREATED, e=>{
-      const layer = e.layer;
-      layer.options.color = '#6cb3ff';
-      S.drawn.addLayer(layer);
-      S.drawnLayer = S.drawn;
-    });
-  } else {
-    S.map.invalidateSize();
-  }
-
-  const input = document.getElementById('gj_in');
+  const input=document.getElementById('gj_in');
   if(input){
     input.addEventListener('change', e=>{
-      const f = e.target.files && e.target.files[0]; if(!f) return;
-      const r = new FileReader();
-      r.onload = ()=>{
-        try{
-          const gj = JSON.parse(r.result);
-          const layer = L.geoJSON(gj,{style:{color:'#6cb3ff'}});
-          S.drawn.addLayer(layer); S.map.fitBounds(layer.getBounds(), {padding:[20,20]});
-        }catch(_){ alert('Invalid GeoJSON'); }
-        e.target.value='';
-      };
+      const f=e.target.files && e.target.files[0]; if(!f) return;
+      const r=new FileReader();
+      r.onload=()=>{ try{ const gj=JSON.parse(r.result); const layer=L.geoJSON(gj,{style:{color:'#6cb3ff'}}); S.drawn.addLayer(layer); S.map.fitBounds(layer.getBounds(),{padding:[20,20]}); }catch(_){ alert('Invalid GeoJSON'); } e.target.value=''; };
       r.readAsText(f);
     });
   }
 }
 function exportGeoJSON(){
-  const gj = S.drawn ? S.drawn.toGeoJSON() : {type:'FeatureCollection', features:[]};
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(gj,null,2)], {type:'application/geo+json'}));
-  a.download = 'turf.geojson'; a.click();
+  const gj = S.drawn ? S.drawn.toGeoJSON() : {type:'FeatureCollection',features:[]};
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(gj,null,2)],{type:'application/geo+json'})); a.download='turf.geojson'; a.click();
 }
 function startHere(){
   if(!navigator.geolocation){ showToast('Geolocation not available','error'); return; }
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude, longitude} = pos.coords;
-    if(!S.map) renderMapView();
-    S.map.setView([latitude, longitude], 16);
-  }, ()=> showToast('Location error','error'));
+  navigator.geolocation.getCurrentPosition(pos=>{ const {latitude,longitude}=pos.coords; if(!S.map) renderMapView(); S.map.setView([latitude,longitude], 16); }, ()=> showToast('Location error','error'));
 }
-function clearMarkers(){
-  S.markers.forEach(m=> S.map.removeLayer(m)); S.markers = [];
-}
+function clearMarkers(){ S.markers.forEach(m=> S.map.removeLayer(m)); S.markers=[]; }
 function createMarker(lat,lng){
   const m = L.marker([lat,lng]).addTo(S.map);
   m.on('click', async ()=>{
     const addr = await reverseGeocode(lat,lng);
-    const popup = document.createElement('div');
-    popup.innerHTML = `
-      <div class="mono" style="max-width:240px">${addr}</div>
+    const popup=document.createElement('div');
+    popup.innerHTML=`<div class="mono" style="max-width:240px">${addr}</div>
       <div class="btn-row" style="margin-top:.4rem">
         <button class="primary" id="ql_lead">Lead</button>
         <button class="ghost" id="ql_no">No Answer</button>
-        <button class="ghost" id="ql_lit">Left Literature</button>
+        <button class="ghost" id="ql_lit">Left Lit</button>
         <button class="ghost" id="ql_obj">Objection</button>
       </div>`;
-    const p = L.popup({maxWidth:260}).setLatLng([lat,lng]).setContent(popup);
-    S.map.openPopup(p);
-
+    const p=L.popup({maxWidth:260}).setLatLng([lat,lng]).setContent(popup); S.map.openPopup(p);
     setTimeout(()=>{
-      const post = async (outcome, objection='')=>{
-        const item = {
-          type: outcome==='Lead' ? 'lead' : 'visit',
-          date:new Date().toISOString().slice(0,10),
-          time:new Date().toISOString(),
-          address: addr, name:'', phone:'', email:'',
-          service:'', urgency:'', timeline:'', budget:'',
-          notes:'(map quick-log)', turf:'', source:'PWA', rep:S.rep||'',
-          outcome: outcome==='Lead'? undefined : outcome,
-          objection, secret: S.secret, emailNotifyTo: S.emailNotifyTo
-        };
-        try{
-          const r = await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify(item)});
-          if(!r.ok) throw new Error('HTTP '+r.status);
-          showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success');
-        }catch(e){
-          S.queue.push(item); saveLS();
-          showToast('Offline: queued','info');
-        }
+      const post = (outcome, objection='')=>{
+        const item={ type: outcome==='Lead'?'lead':'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
+          address: addr, notes:'(map quick-log)', outcome: outcome==='Lead'? undefined : outcome, objection, rep:S.rep||'', source:'PWA' };
         S.visitsLog.push(item); saveLS();
+        showToast((outcome==='Lead'?'Lead':'Visit')+' saved locally ✓','success');
         if(outcome==='Lead') go('lead');
       };
       popup.querySelector('#ql_lead')?.addEventListener('click', ()=> post('Lead'));
       popup.querySelector('#ql_no')?.addEventListener('click', ()=> post('No Answer'));
       popup.querySelector('#ql_lit')?.addEventListener('click', ()=> post('Left Literature'));
-      popup.querySelector('#ql_obj')?.addEventListener('click', ()=>{
-        const o = prompt('Objection?','Renter');
-        if(o) post('Objection', o);
-      });
-    }, 0);
+      popup.querySelector('#ql_obj')?.addEventListener('click', ()=>{ const o=prompt('Objection?','Renter'); if(o) post('Objection', o); });
+    },0);
   });
   S.markers.push(m); return m;
 }
 async function generateDoorLoop(n=20, radius=0.0015){
   if(!navigator.geolocation){ showToast('Geolocation not available','error'); return; }
   navigator.geolocation.getCurrentPosition(async pos=>{
-    const {latitude, longitude} = pos.coords;
-    clearMarkers();
-    for(let i=0;i<n;i++){
-      const ang = (i/n) * Math.PI*2;
-      createMarker(latitude + radius*Math.cos(ang), longitude + radius*Math.sin(ang));
-    }
+    const {latitude, longitude}=pos.coords; clearMarkers();
+    for(let i=0;i<n;i++){ const ang=(i/n)*Math.PI*2; createMarker(latitude + radius*Math.cos(ang), longitude + radius*Math.sin(ang)); }
     S.map.setView([latitude, longitude], 16);
     showToast(`Generated ~${n} markers around you`,'success');
   }, ()=> showToast('Location error','error'));
