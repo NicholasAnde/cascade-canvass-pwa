@@ -99,6 +99,7 @@ function go(tab){
     settings: renderSettings
   };
   const fn = routes[tab] || renderDashboard;
+  highlightNav(tab);
   swapView(fn);
 }
 
@@ -114,32 +115,62 @@ function downloadCSV(name, rows){
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
 }
 
-// ---------- Dashboard ----------
+// ---------- Nav highlight ----------
+function highlightNav(tab){
+  document.querySelectorAll('.nav a').forEach(a=>{
+    const m = (a.getAttribute('onclick')||'').match(/nav\('([^']+)'\)/);
+    const t = m && m[1];
+    if (t===tab) a.classList.add('active'); else a.classList.remove('active');
+  });
+}
+
+// ---------- Dashboard (tiles) ----------
 function renderDashboard(){
   const hasVisits = S.visitsLog.length > 0;
-  const hasLeads  = S.leadsLog.length  > 0;
 
   el('#view').innerHTML = `
   <section class="card">
     <h2>Welcome ${S.rep?('<span class="success">'+S.rep+'</span>'):'(Set Rep in Settings)'}</h2>
-    <div class="stats">
-      <span class="badge">Cooldown ${S.cooldownDays}d</span>
-      <span class="badge">Photos</span>
-      <span class="badge">OSM + Turf</span>
-      <span class="badge">Scripts</span>
-      <span class="badge">Offline queue (${S.queue.length})</span>
+    <div class="tiles" style="margin-top:.6rem">
+      <div class="tile primary" onclick="go('knock')">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="#e6e7e9" stroke-width="2" d="M4 4h16v16H4z"/><path fill="none" stroke="#e6e7e9" stroke-width="2" d="M8 10h8M8 14h5"/></svg>
+        <div class="big">Next Door</div>
+        <div class="sub">Knock & log quickly</div>
+      </div>
+      <div class="tile primary" onclick="go('lead')">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#e6e7e9" stroke-width="2"/><path d="M12 7v6l4 2" fill="none" stroke="#e6e7e9" stroke-width="2"/></svg>
+        <div class="big">New Lead</div>
+        <div class="sub">Save details & photos</div>
+      </div>
+      <div class="tile" onclick="go('map')">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l7-3 7 3 4-2v14l-7 3-7-3-4 2V6" fill="none" stroke="#e6e7e9" stroke-width="2"/><path d="M10 3v18M17 5v16" fill="none" stroke="#e6e7e9" stroke-width="2"/></svg>
+        <div class="big">Map / Turf</div>
+        <div class="sub">Plan & navigate</div>
+      </div>
+      <div class="tile" onclick="go('scripts')">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4" fill="none" stroke="#e6e7e9" stroke-width="2"/></svg>
+        <div class="big">Scripts</div>
+        <div class="sub">Openers & rebuttals</div>
+      </div>
     </div>
-    <div class="btn-row" style="margin-top:.6rem">
-      <button class="primary" onclick="go('knock')">Next Door</button>
-      <button class="primary" onclick="go('lead')">New Lead</button>
-      <button class="primary" onclick="go('map')">Map / Turf</button>
+    <div class="btn-row" style="margin-top:1rem">
       ${hasVisits ? `<button class="ghost" onclick="downloadCSV('visits.csv', S.visitsLog)">Export Visits</button>` : ``}
-      ${hasLeads  ? `<button class="ghost" onclick="downloadCSV('leads.csv',  S.leadsLog )">Export Leads</button>`  : ``}
     </div>
   </section>`;
 }
 
 // ---------- Settings + Admin (long-press) ----------
+function peekQueue(){
+  try{
+    const q = S.queue || [];
+    const head = q[0] || {};
+    alert(
+      `Queued: ${q.length}\nType: ${head.type||'-'}\nAddress: ${head.address||'-'}\n` +
+      `Has secret: ${'secret' in head}\nEndpoint: ${S.endpoint||'-'}`
+    );
+  }catch(_){}
+}
+
 function renderSettings(){
   el('#view').innerHTML = `
   <section class="card">
@@ -164,8 +195,10 @@ function renderSettings(){
     </div>
     <div class="btn-row" style="margin-top:.6rem">
       <button class="primary" onclick="savePrefs()">Save</button>
+      <button class="ghost"   onclick="downloadCSV('leads.csv', S.leadsLog)">Export Leads</button>
       <button class="ghost"   onclick="refreshCache()">Refresh Offline Cache</button>
       <button class="ghost"   onclick="retryQueue()">Retry Offline Queue (${S.queue.length})</button>
+      <button class="ghost"   onclick="peekQueue()">Queue Inspector</button>
     </div>
     <p class="mono" style="margin-top:.5rem;">Endpoint: ${S.endpoint||'(not loaded)'} • Email: ${S.emailNotifyTo||'—'}</p>
 
@@ -225,30 +258,20 @@ async function retryQueue(){
   const q=[...S.queue]; S.queue=[]; saveLS();
   let sent=0, failed=0, lastErr='';
   for(const item of q){
-    // ⬅ inject current secret/email onto every queued payload before POST
     item.secret = S.secret;
     item.emailNotifyTo = S.emailNotifyTo;
-
     try{
-      const r = await fetch(S.endpoint, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(item)
-      });
+      const r = await fetch(S.endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(item)});
       if(!r.ok) { failed++; lastErr = 'HTTP '+r.status; throw new Error(lastErr); }
       sent++;
     }catch(e){
-      // keep the data—requeue it
       S.queue.push(item);
       lastErr = String(e && e.message || e || 'send failed');
     }
   }
   saveLS();
-
   if(sent) showToast(`Synced ${sent} item${sent>1?'s':''} ✓`,'success');
   if(failed) showToast(`${failed} still queued (${lastErr})`,'info');
-}
-
 }
 function saveAdminConfig(){
   const s = (el('#adm_secret').value||'').trim();
@@ -537,22 +560,21 @@ async function renderScripts(){
   updatePreview();
 }
 
-// ---------- Map / Turf (Leaflet + Draw + import/export) ----------
+// ---------- Map / Turf (Leaflet + Draw + import/export + FABs) ----------
 function renderMapView(){
   el('#view').innerHTML = `
     <section class="card">
       <h2>Map / Turf</h2>
-      <div class="btn-row" style="margin-bottom:.5rem">
-        <button class="primary" onclick="startHere()">Start Here</button>
-        <button class="ghost" onclick="exportGeoJSON()">Export GeoJSON</button>
-        <label class="ghost" style="display:inline-flex;align-items:center;gap:.5rem;cursor:pointer">
-          <input id="gj_in" type="file" accept=".geojson,application/geo+json,application/json" style="display:none" onchange="importGeoJSON(this)"/>
-          <span>Import GeoJSON</span>
-        </label>
-        <span class="badge">Cooldown ${S.cooldownDays}d</span>
-      </div>
       <div id="map" class="map"></div>
-      <p class="muted" id="map_msg"></p>
+      <div class="fab-wrap">
+        <button class="fab" title="Start Here" onclick="startHere()">📍</button>
+        <button class="fab" title="Export Turf" onclick="exportGeoJSON()">⬆</button>
+        <label class="fab" title="Import Turf" style="cursor:pointer">
+          ⬇
+          <input id="fab_gj_in" type="file" accept=".geojson,application/geo+json,application/json" style="display:none" />
+        </label>
+      </div>
+      <p class="muted mono" id="map_msg"></p>
     </section>
   `;
 
@@ -580,6 +602,25 @@ function renderMapView(){
   }else{
     S.map.invalidateSize();
   }
+
+  const inp = document.getElementById('fab_gj_in');
+  if (inp){
+    inp.addEventListener('change', (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = ()=>{
+        try{
+          const gj = JSON.parse(r.result);
+          const layer = L.geoJSON(gj,{style:{color:'#6cb3ff'}});
+          S.drawn.addLayer(layer); S.map.fitBounds(layer.getBounds(), {padding:[20,20]});
+        }catch(e){ alert('Invalid GeoJSON'); }
+        e.target.value='';
+      };
+      r.readAsText(file);
+    });
+  }
+
   drawCooldownHeat();
 }
 
@@ -587,19 +628,6 @@ function exportGeoJSON(){
   const gj = S.drawn.toGeoJSON();
   const blob = new Blob([JSON.stringify(gj,null,2)], {type:'application/geo+json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'turf.geojson'; a.click();
-}
-function importGeoJSON(input){
-  const f = input.files && input.files[0]; if(!f) return;
-  const r = new FileReader();
-  r.onload = ()=>{
-    try{
-      const gj = JSON.parse(r.result);
-      const layer = L.geoJSON(gj,{style:{color:'#6cb3ff'}});
-      S.drawn.addLayer(layer); S.map.fitBounds(layer.getBounds(), {padding:[20,20]});
-    }catch(e){ alert('Invalid GeoJSON'); }
-    input.value='';
-  };
-  r.readAsText(f);
 }
 
 let _lastRG = 0;
@@ -686,7 +714,6 @@ function startHere(){
     const {latitude, longitude} = pos.coords;
     if(!S.map){ renderMapView(); }
     S.map.setView([latitude, longitude], 16);
-    // simple ring of markers (~20) around you
     const n=20, r=0.0015;
     S.markers.forEach(m=> S.map.removeLayer(m.marker)); S.markers=[];
     for(let i=0;i<n;i++){
@@ -698,7 +725,6 @@ function startHere(){
   }, ()=> alert('Location error'));
 }
 function colorMarkers(){
-  // colorize markers based on cooldown by reverse geocoding each (lightweight; uses rate limit)
   S.markers.forEach(async ({marker,lat,lng})=>{
     const addr = await reverseGeocode(lat,lng);
     const eligible = !S.visitsIndex[addr] || daysSince(S.visitsIndex[addr]) >= S.cooldownDays;
