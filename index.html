@@ -8,12 +8,41 @@
   <meta name="theme-color" content="#111111"/>
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <!-- Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <link rel="stylesheet" href="assets/style.css"/>
 </head>
 <body>
-  <header class="topbar"><h1>Cascade Canvass</h1></header>
+  <header class="topbar">
+    <h1>Cascade Canvass</h1>
+    <nav class="tabs">
+      <button onclick="go('dashboard')">Home</button>
+      <button onclick="go('knock')">Next Door</button>
+      <button onclick="go('lead')">New Lead</button>
+      <button onclick="go('map')">Map/Turf</button>
+      <button onclick="go('settings')">Settings</button>
+    </nav>
+  </header>
+
   <main id="view"></main>
-  <footer class="foot"><small>PWA • Endpoint: <span id="ep"></span></small></footer>
+  <footer class="foot"><small>PWA • Endpoint: <span id="ep" class="mono"></span></small></footer>
+
+  <!-- Toasts -->
+  <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Map JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
   <script src="assets/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () =>
+        navigator.serviceWorker.register('./sw.js').catch(console.error)
+      );
+    }
+    document.addEventListener('DOMContentLoaded', () => go('dashboard'));
+  </script>
 </body>
 </html>
