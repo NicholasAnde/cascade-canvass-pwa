@@ -1,0 +1,1 @@
+const S={rep:'',endpoint:null};function boot(){document.getElementById('view').innerHTML='<h2>Dashboard</h2>';fetch('./app.settings.json').then(r=>r.json()).then(cfg=>{S.endpoint=cfg.sheetsEndpoint;document.getElementById('ep').textContent=S.endpoint;});}window.addEventListener('load',boot);
