@@ -1,5 +1,5 @@
-// Service worker — Stable Full (cache bump)
-const CACHE = 'canvass-stable-full-v1';
+// Service worker — Stable Full (cache bump for Scripts screen)
+const CACHE = 'canvass-stable-full-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './app.settings.json',
   './assets/style.css',
   './assets/app.js',
+  './assets/scripts.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/favicon.png'
