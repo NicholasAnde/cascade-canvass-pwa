@@ -1,0 +1,55 @@
+{
+  "seasons": {
+    "Spring": "We\u2019re helping neighbors get ahead of spring growth so trees don\u2019t overtake the yard.",
+    "Summer": "With heat drying heavy limbs, folks are trimming before they snap.",
+    "Fall": "We\u2019re storm-proofing trees before wind and rain hit.",
+    "Winter": "After these storms, we\u2019re checking weakened branches and hazards."
+  },
+  "audience": {
+    "General": "",
+    "Pros": "Most people hire us because it\u2019s faster than a weekend on a ladder.",
+    "Retirees": "Peace of mind is the big win\u2014no surprises when wind picks up."
+  },
+  "localCues": {
+    "Felida": "Older mature trees here\u2014we\u2019re doing a lot of safety trims.",
+    "Lake Shore": "Established homeowners\u2014storm-prep is popular here.",
+    "Camas": "Quick preventative trims so you don\u2019t have to block time off work.",
+    "East Vancouver": "Dense single-family streets\u2014fast preventative trims.",
+    "Hockinson / Brush Prairie": "Larger treed lots\u2014happy to check the big firs.",
+    "Salmon Creek": "Solid middle-upper neighborhoods with mature trees.",
+    "Ridgefield": "Newer builds\u2014preventative trims before growth takes off.",
+    "Washougal": "Hillside & Gorge exposure\u2014wind prep matters here.",
+    "Battle Ground": "Lots of single-family homes\u2014steady preventative work."
+  },
+  "core": {
+    "opener": "Hi, I\u2019m Nick with Cascade Tree Works. Quick question\u2014",
+    "ask": "\u2014any trees you\u2019ve been meaning to trim or check before the weather?",
+    "close": "Great\u2014what\u2019s the best name and number for a free quote?"
+  },
+  "rebuttals": {
+    "Already have someone": {
+      "A": "That\u2019s great\u2014most folks like a second opinion for comparison.",
+      "B": "We often help even if you\u2019ve got a regular\u2014especially for storm prep."
+    },
+    "Not interested": {
+      "A": "All good\u2014I\u2019ll leave our info in case a limb acts up.",
+      "B": "Understood\u2014calls jump after a gusty night; we\u2019d rather prevent it."
+    },
+    "Too busy": {
+      "A": "Totally\u2014takes 10 seconds to put you on the free-quote list.",
+      "B": "No problem\u2014what\u2019s a quick time window and we\u2019ll work around you?"
+    },
+    "Cost": {
+      "A": "Estimates are free\u2014we can focus on the risk spots only.",
+      "B": "We\u2019ll show options\u2014often a trim beats a removal."
+    },
+    "Later": {
+      "A": "Sure\u2014want me to note a check before the next storm front?",
+      "B": "No rush\u2014if I leave info, you\u2019ve got us when you\u2019re ready."
+    },
+    "Renter": {
+      "A": "Got it\u2014usually the landlord handles tree work. I\u2019ll leave our info for them.",
+      "B": "If you\u2019d like, I can note the property manager\u2019s contact for a quote."
+    }
+  }
+}
