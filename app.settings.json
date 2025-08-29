@@ -1,7 +1,0 @@
-{
-  "sheetsEndpoint": "https://script.google.com/macros/s/DEPLOYMENT_ID/exec",
-  "sharedSecret": "REPLACE_WITH_SHARED_SECRET",
-  "emailNotifyTo": "REPLACE_WITH_TARGET_EMAIL",
-  "cooldownDays": 90,
-  "debug": false
-}
