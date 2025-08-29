@@ -348,6 +348,7 @@
       try {
         await uploadLead(it);
         await dbDelete(it.leadID);
+        if (it.address) try { markVisited(it.address); } catch(e) {}
         toast(`Lead [${it.leadID}] synced`, 'ok', 2000);
       } catch (e) {
         console.warn('Sync failed:', e);
@@ -414,6 +415,163 @@
     }
   }
 
+  
+  // ===== Geocoder (Overpass) + Cooldown =====
+  const geo = {
+    list: [],
+    idx: -1,
+    pos: null
+  };
+
+  function cooldownDays() {
+    const n = Number(state.cfg.cooldownDays || 90);
+    return isFinite(n) ? n : 90;
+  }
+
+  function keyForAddr(addr) {
+    return ('cc.cool.' + (addr || '').toLowerCase());
+  }
+
+  function isCooledDown(addr) {
+    const last = Number(localStorage.getItem(keyForAddr(addr)) || 0);
+    if (!last) return true;
+    const ms = cooldownDays() * 24 * 3600 * 1000;
+    return Date.now() - last > ms;
+  }
+
+  function markVisited(addr) {
+    localStorage.setItem(keyForAddr(addr), String(Date.now()));
+  }
+
+  async function getPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('Geolocation unavailable'));
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        (err) => reject(err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    });
+  }
+
+  function buildOverpassQuery(lat, lon, radius=250) {
+    // Fetch nodes/ways with address tags near the user
+    return `[out:json][timeout:25];
+      (
+        node(around:${radius},${lat},${lon})[\"addr:housenumber\"][\"addr:street\"];
+        way(around:${radius},${lat},${lon})[\"addr:housenumber\"][\"addr:street\"];
+      );
+      out center;`;
+  }
+
+  function osmToAddresses(json) {
+    const out = [];
+    const seen = new Set();
+    (json.elements || []).forEach(e => {
+      const t = e.tags || {};
+      const num = t['addr:housenumber'];
+      const street = t['addr:street'];
+      if (!num || !street) return;
+      const city = t['addr:city'] || '';
+      const stateCode = t['addr:state'] || '';
+      const zip = t['addr:postcode'] || '';
+      const lat = e.lat || (e.center && e.center.lat);
+      const lon = e.lon || (e.center && e.center.lon);
+      if (lat == null || lon == null) return;
+      const addr = `${num} ${street}${city? ', '+city: ''}${stateCode? ', '+stateCode: ''}${zip? ' '+zip: ''}`;
+      if (seen.has(addr)) return;
+      seen.add(addr);
+      out.push({ addr, lat, lon });
+    });
+    return out;
+  }
+
+  function distanceMeters(a, b) {
+    const toRad = (x)=> x * Math.PI/180;
+    const R=6371000;
+    const dLat=toRad(b.lat-a.lat);
+    const dLon=toRad(b.lon-a.lon);
+    const la1=toRad(a.lat);
+    const la2=toRad(b.lat);
+    const aHar=Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+    return 2*R*Math.atan2(Math.sqrt(aHar), Math.sqrt(1-aHar));
+  }
+
+  function sortByDistance(list, origin) {
+    return list.map(it => ({...it, d: Math.round(distanceMeters(origin, {lat: it.lat, lon: it.lon}))}))
+               .sort((a,b)=>a.d-b.d);
+  }
+
+  function nextCandidate() {
+    if (!geo.list.length) return null;
+    for (let i=1; i<=geo.list.length; i++) {
+      geo.idx = (geo.idx + 1) % geo.list.length;
+      const cand = geo.list[geo.idx];
+      if (isCooledDown(cand.addr)) return cand;
+    }
+    return null;
+  }
+
+  function showCandidate(c) {
+    const out = $('#nextOutput');
+    if (!c) {
+      out.innerHTML = '<span style="color:var(--muted)">No cooled-down addresses nearby. Try Reload Nearby or widen radius.</span>';
+      return;
+    }
+    out.innerHTML = `<div><b>Next:</b> ${esc(c.addr)} <small style="color:var(--muted)">(${c.d||'?'} m)</small></div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn primary" id="useThisAddr">Use in New Lead</button>
+      <button class="btn" id="skipThis">Skip</button>
+    </div>`;
+    $('#useThisAddr').addEventListener('click', () => {
+      // Push address into New Lead form and navigate
+      $('#address').value = c.addr;
+      show('new');
+    });
+    $('#skipThis').addEventListener('click', () => {
+      const n = nextCandidate();
+      showCandidate(n);
+    });
+  }
+
+  async function reloadNearby() {
+    const out = $('#nextOutput');
+    out.textContent = 'Locating and fetching nearby addresses…';
+    try {
+      const pos = await getPosition();
+      geo.pos = pos;
+      const query = buildOverpassQuery(pos.lat, pos.lon, 300);
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: {'Content-Type':'text/plain;charset=UTF-8'},
+        body: query
+      });
+      if (!res.ok) throw new Error('Overpass HTTP '+res.status);
+      const data = await res.json();
+      let list = osmToAddresses(data);
+      list = sortByDistance(list, pos);
+      geo.list = list;
+      geo.idx = -1;
+      const first = nextCandidate();
+      showCandidate(first);
+    } catch (e) {
+      out.innerHTML = `<span style="color:var(--muted)">Geocoder failed: ${esc(e.message||e)}</span>`;
+    }
+  }
+
+  function nextClosest() {
+    const c = nextCandidate();
+    showCandidate(c);
+  }
+
+  // Wire buttons on Next Door screen
+  function initNextDoor() {
+    const r = $('#btnReloadNearby'), s = $('#btnSkipDoor'), n = $('#btnNextClosest');
+    r && r.addEventListener('click', reloadNearby);
+    s && s.addEventListener('click', () => { const c = nextCandidate(); showCandidate(c); });
+    n && n.addEventListener('click', nextClosest);
+  }
+
   // Events & init
   function bindEvents() {
     $('#leadForm').addEventListener('submit', handleLeadSubmit);
@@ -447,6 +605,7 @@
     await loadConfig();
     initSettingsUI();
     initNav();
+    initNextDoor();
     state.idb = await openDB();
     updateQueueState();
     // Prefill rep into new lead form

@@ -1,55 +1,33 @@
 {
-  "seasons": {
-    "Spring": "We\u2019re helping neighbors get ahead of spring growth so trees don\u2019t overtake the yard.",
-    "Summer": "With heat drying heavy limbs, folks are trimming before they snap.",
-    "Fall": "We\u2019re storm-proofing trees before wind and rain hit.",
-    "Winter": "After these storms, we\u2019re checking weakened branches and hazards."
-  },
-  "audience": {
-    "General": "",
-    "Pros": "Most people hire us because it\u2019s faster than a weekend on a ladder.",
-    "Retirees": "Peace of mind is the big win\u2014no surprises when wind picks up."
-  },
-  "localCues": {
-    "Felida": "Older mature trees here\u2014we\u2019re doing a lot of safety trims.",
-    "Lake Shore": "Established homeowners\u2014storm-prep is popular here.",
-    "Camas": "Quick preventative trims so you don\u2019t have to block time off work.",
-    "East Vancouver": "Dense single-family streets\u2014fast preventative trims.",
-    "Hockinson / Brush Prairie": "Larger treed lots\u2014happy to check the big firs.",
-    "Salmon Creek": "Solid middle-upper neighborhoods with mature trees.",
-    "Ridgefield": "Newer builds\u2014preventative trims before growth takes off.",
-    "Washougal": "Hillside & Gorge exposure\u2014wind prep matters here.",
-    "Battle Ground": "Lots of single-family homes\u2014steady preventative work."
-  },
-  "core": {
-    "opener": "Hi, I\u2019m Nick with Cascade Tree Works. Quick question\u2014",
-    "ask": "\u2014any trees you\u2019ve been meaning to trim or check before the weather?",
-    "close": "Great\u2014what\u2019s the best name and number for a free quote?"
-  },
-  "rebuttals": {
-    "Already have someone": {
-      "A": "That\u2019s great\u2014most folks like a second opinion for comparison.",
-      "B": "We often help even if you\u2019ve got a regular\u2014especially for storm prep."
+  "version": "2025-08-29",
+  "items": [
+    {
+      "title": "Opener \u2014 Summer (Homeowner)",
+      "body": "Hi there \u2014 I\u2019m with Cascade Tree Works. We\u2019re in the neighborhood this week helping with pruning, storm\u2011prep, and hazard checks. Do you have any branches over the roofline or deadwood you\u2019ve been meaning to handle?"
     },
-    "Not interested": {
-      "A": "All good\u2014I\u2019ll leave our info in case a limb acts up.",
-      "B": "Understood\u2014calls jump after a gusty night; we\u2019d rather prevent it."
+    {
+      "title": "Opener \u2014 Retiree (Shade/Access)",
+      "body": "Hi! Quick question \u2014 any trouble with shade over the lawn or limbs near the driveway? We\u2019re offering quick trims that improve access without changing the look of your yard."
     },
-    "Too busy": {
-      "A": "Totally\u2014takes 10 seconds to put you on the free-quote list.",
-      "B": "No problem\u2014what\u2019s a quick time window and we\u2019ll work around you?"
+    {
+      "title": "Opener \u2014 Busy Professional (Low\u2011disruption)",
+      "body": "Hey \u2014 we\u2019re scheduling low\u2011disruption trims this week (in/out in a couple of hours). Anything you want a no\u2011obligation look at while we\u2019re here?"
     },
-    "Cost": {
-      "A": "Estimates are free\u2014we can focus on the risk spots only.",
-      "B": "We\u2019ll show options\u2014often a trim beats a removal."
+    {
+      "title": "Local Cue \u2014 Storms",
+      "body": "We\u2019re seeing some stress from last month\u2019s wind \u2014 small cracks where limbs meet the trunk. A quick safety prune now is cheaper than emergency removals later."
     },
-    "Later": {
-      "A": "Sure\u2014want me to note a check before the next storm front?",
-      "B": "No rush\u2014if I leave info, you\u2019ve got us when you\u2019re ready."
+    {
+      "title": "Rebuttal \u2014 \"We\u2019ll do it later\"",
+      "body": "Totally fair. The good news is a quick assessment is free and locks in current pricing \u2014 would you like a 2\u2011minute look now or should we pencil a time this week?"
     },
-    "Renter": {
-      "A": "Got it\u2014usually the landlord handles tree work. I\u2019ll leave our info for them.",
-      "B": "If you\u2019d like, I can note the property manager\u2019s contact for a quote."
+    {
+      "title": "Rebuttal \u2014 \"We have a guy\"",
+      "body": "Great to hear! We work alongside a lot of trusted folks. If they\u2019re booked out, we can give you a comparative plan so you have options \u2014 would that help?"
+    },
+    {
+      "title": "Close \u2014 Lead Capture",
+      "body": "Perfect \u2014 I\u2019ll grab your name and the best number/email so our arborist can confirm a window. We\u2019ll send a quick summary and photos if you\u2019d like."
     }
-  }
+  ]
 }
