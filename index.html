@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#111111"/>
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="assets/style.css"/>
 </head>
 <body>
@@ -24,6 +25,7 @@
       <a href="#" onclick="nav('knock')">Next Door</a>
       <a href="#" onclick="nav('lead')">New Lead</a>
       <a href="#" onclick="nav('tracker')">Lead Tracker</a>
+      <a href="#" onclick="nav('maptoday')">Map Today</a>
       <a href="#" onclick="nav('scripts')">Scripts</a>
       <a href="#" onclick="nav('settings')">Settings</a>
     </nav>
@@ -50,6 +52,7 @@
     window.addEventListener('error', e=>{ const box=document.getElementById('err'); box.style.display='block'; box.textContent = 'JS Error: '+(e.message||e.error||e); });
     document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
   </script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>

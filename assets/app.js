@@ -1,4 +1,4 @@
-// Consolidated v4.2: mobile-optimized UI (bottom actions, better inputs), dark dropdown contrast, same features
+// v4.3: Adds Map Today tab (Leaflet) showing today's visited houses; stores lat/lon on visits/leads; mobile-first.
 
 // --- State ---
 window.S = window.S || {
@@ -46,7 +46,7 @@ const daysSince = iso => Math.floor((Date.now() - new Date(iso).getTime())/86400
 const todayISO = ()=> new Date().toISOString().slice(0,10);
 const weekAgoISO = ()=> new Date(Date.now()-6*86400000).toISOString().slice(0,10);
 
-// --- Stats bar (defer compute to after paint) ---
+// --- Stats bar ---
 function counts(){ const t=todayISO(), wk=weekAgoISO(); return {
   doorsToday:(S.visitsLog||[]).filter(v=>(v.date||'').slice(0,10)===t).length,
   leadsToday:(S.leadsLog||[]).filter(l=>(l.date||'').slice(0,10)===t).length,
@@ -64,6 +64,7 @@ function go(tab){
   if(tab==='knock') return renderKnock_geo();
   if(tab==='lead') return renderLead();
   if(tab==='tracker') return renderTracker();
+  if(tab==='maptoday') return renderMapToday();
   if(tab==='scripts') return renderScripts();
   if(tab==='settings') return renderSettings();
   renderDashboard();
@@ -77,7 +78,7 @@ function downloadCSV(name, rows){ if(!rows.length){ showToast('No data to export
 const KM = (a,b)=>{ const R=6371e3, toRad=x=>x*Math.PI/180; const dlat=toRad(b.lat-a.lat), dlon=toRad(b.lon-a.lon), la1=toRad(a.lat), la2=toRad(b.lat); const x=Math.sin(dlat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dlon/2)**2; return 2*R*Math.asin(Math.sqrt(x)); };
 function fmtAddr(tags){ const num=tags['addr:housenumber']||'', street=tags['addr:street']||tags['name']||'', unit=tags['addr:unit']||'', city=tags['addr:city']||tags['addr:suburb']||''; return [num,street,unit?('#'+unit):'',city].filter(Boolean).join(' ').replace(/\\s+/g,' ').trim(); }
 function lastIndex(){ return (S.visitsLog||[]).reduce((m,v)=>{const a=(v.address||'').trim(), t=v.time||v.date||''; if(!a||!t) return m; if(!m[a] || new Date(t)>new Date(m[a])) m[a]=t; return m;},{}); }
-let _overpassBusy=false, _lastRG=0;
+let _overpassBusy=false;
 async function fetchNearby(lat,lon, radius=S.geoRadius, limit=S.geoLimit){
   if(_overpassBusy) return S.geoList; _overpassBusy=true;
   try{
@@ -104,21 +105,21 @@ function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.g
 
 // --- Views ---
 function renderDashboard(){
-  const paint = ()=>{
+  requestAnimationFrame(()=>{
     const addr = S.geoList[S.geoPtr]?.addr || '(tap Next Door to load nearby)';
     el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
       <div class="btn-row">
         <button class="primary" onclick="go('knock')">Next Door</button>
         <button onclick="go('lead')">New Lead</button>
         <button onclick="go('tracker')">Lead Tracker</button>
+        <button onclick="go('maptoday')">Map Today</button>
         <button onclick="go('scripts')">Scripts</button>
         <button onclick="go('settings')">Settings</button>
       </div>
       <div class="field"><label>Current suggestion</label><input value="${addr}" readonly/></div>
       <div class="btn-row" style="margin-top:.6rem"><button class="ghost" onclick="downloadCSV('visits.csv', S.visitsLog)">Export Visits</button></div>
     </section>`;
-  };
-  requestAnimationFrame(paint);
+  });
 }
 
 async function renderKnock_geo(){
@@ -149,13 +150,15 @@ async function postVisit_geo(outcome){
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   let objection='';
   if(outcome==='Declined'){ objection = prompt('Reason for decline? (optional)', '') || ''; }
+  const cur=S.geoList[S.geoPtr]||{};
   const item={ type: outcome==='Lead'?'lead':'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
-    address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection };
+    address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection,
+    lat: (typeof cur.lat==='number')?cur.lat:null, lon: (typeof cur.lon==='number')?cur.lon:null };
   if(S.endpoint){ const payload={...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo}; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('HTTP '+r.status);} catch(e){ S.queue.push(payload); saveLS(); } }
   S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
 }
 
-// Lead form — mobile inputs
+// Lead form
 function renderLead(){ el('#view').innerHTML=`<section class="card">${statsBarHTML()}<h2>New Lead</h2>
   <div class="field"><label>Name*</label><input id="l_name" inputmode="text" autocomplete="name"></div>
   <div class="field"><label>Phone*</label><input id="l_phone" inputmode="tel" autocomplete="tel" placeholder="(###) ###-####"></div>
@@ -168,18 +171,20 @@ function renderLead(){ el('#view').innerHTML=`<section class="card">${statsBarHT
   <div class="bottom-actions"><button class="primary" onclick="saveLead()">Save</button><button onclick="go('dashboard')">Cancel</button></div>
 </section>`; }
 async function saveLead(){
+  const cur=S.geoList[S.geoPtr]||{};
   const b={
     type:'lead', date: new Date().toISOString().slice(0,10), time: new Date().toISOString(),
     name:(el('#l_name').value||'').trim(), phone:(el('#l_phone').value||'').trim(), email:(el('#l_email').value||'').trim(),
     address:(el('#l_addr').value||'').trim(), service: el('#l_service').value, urgency: el('#l_urgency').value,
-    budget: el('#l_budget').value, notes:(el('#l_notes').value||'').trim(), rep:S.rep||'', source:'PWA'
+    budget: el('#l_budget').value, notes:(el('#l_notes').value||'').trim(), rep:S.rep||'', source:'PWA',
+    lat: (typeof cur.lat==='number')?cur.lat:null, lon: (typeof cur.lon==='number')?cur.lon:null
   };
   if(!b.name){ showToast('Name required','error'); return; }
   if(S.endpoint){ const payload={...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo}; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('HTTP '+r.status);} catch(e){ S.queue.push(payload); saveLS(); } }
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
 }
 
-// Lead Tracker (no filter, tighter density, local delete)
+// Lead Tracker (no filter, local delete)
 function renderTracker(){
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -221,6 +226,34 @@ async function renderScripts(){
       <div style="margin-top:.3rem"><small><b>A</b>) ${r[k].A}</small></div>
       <div style="margin-top:.1rem"><small><b>B</b>) ${r[k].B}</small></div>
     </div>`).join('') || '<small>No rebuttals</small>';
+}
+
+// Map Today — markers for today's visits with lat/lon
+function renderMapToday(){
+  const t = todayISO();
+  const pts = (S.visitsLog||[]).filter(v => (v.date||'').slice(0,10)===t && typeof v.lat==='number' && typeof v.lon==='number');
+  el('#view').innerHTML = `<section class="card"><h2>Map Today</h2>
+    <div id="map" class="map"></div>
+    ${pts.length? '' : '<div class="field"><label>No mapped visits today</label><div><small>New knocks from “Next Door” will appear here.</small></div></div>'}
+  </section>`;
+  setTimeout(()=>{
+    if(!window.L) { showToast('Map library not loaded','error'); return; }
+    const map = L.map('map');
+    const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
+    map.setView(start, pts[0]?16:12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+    if(pts.length){
+      const bounds = [];
+      pts.forEach(p=>{
+        const m = L.marker([p.lat, p.lon]).addTo(map);
+        const title = `${p.address||''}`;
+        const subtitle = `${p.outcome||'Visit'} • ${new Date(p.time||'').toLocaleTimeString()}`;
+        m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
+        bounds.push([p.lat, p.lon]);
+      });
+      if(bounds.length>1) map.fitBounds(bounds, {padding:[20,20]});
+    }
+  }, 0);
 }
 
 // Settings

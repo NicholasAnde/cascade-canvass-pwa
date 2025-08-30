@@ -43,3 +43,5 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 /* Bottom action bar on Next Door */
 .bottom-actions{position:sticky;bottom:0;left:0;right:0;background:rgba(18,20,24,.8);backdrop-filter:saturate(120%) blur(6px);border-top:1px solid var(--line);padding:.5rem .6rem;display:flex;gap:.5rem;z-index:8}
 .bottom-actions button{flex:1}
+/* Map */
+.map{height:60vh;border:1px solid var(--line);border-radius:12px;overflow:hidden}
