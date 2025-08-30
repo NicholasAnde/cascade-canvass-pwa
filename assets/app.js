@@ -1,4 +1,4 @@
-// Consolidated v4: scripts auto-season (no season dropdown), lead form fields per request, Declined reason, stats bar
+// v4-fixed: auto-season scripts, simplified lead form, Declined reason, stats bar, fixed retryQueue
 
 // --- State ---
 window.S = window.S || {
@@ -154,7 +154,7 @@ async function postVisit_geo(outcome){
   S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
 }
 
-// Lead form — fields requested only
+// Lead form — specified fields only
 function renderLead(){ el('#view').innerHTML=`<section class="card">${statsBarHTML()}<h2>New Lead</h2>
   <div class="field"><label>Name*</label><input id="l_name"></div>
   <div class="field"><label>Phone*</label><input id="l_phone" placeholder="(###) ###-####"></div>
@@ -180,7 +180,7 @@ async function saveLead(){
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
 }
 
-// Lead Tracker (no filter, with local delete)
+// Lead Tracker (no filter, local delete)
 function renderTracker(){
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -202,7 +202,6 @@ function renderTracker(){
 async function renderScripts(){
   let data=null; try{ data=await fetch('assets/scripts.json').then(r=>r.json()); }catch(_){}
   data = data || {seasons:{},audience:{},core:{opener:'',ask:'',close:''}};
-  // Compute season from current month
   const m = new Date().getMonth()+1;
   const season = (m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
   const audiences=Object.keys(data.audience||{});
@@ -226,6 +225,31 @@ function renderSettings(){ el('#view').innerHTML = `<section class="card">${stat
 </section>`; }
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
 
-// Queue helpers
-async function retryQueue(){ if(!S.queue.length){ showToast('Queue empty','info'); return; } const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last=''; for(const p of q){ p.secret=S.secret; p.emailNotifyTo=S.emailNotifyTo; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); if(!r.ok) throw new Error('HTTP '+r.status); sent++; }catch(e){ S.queue.push(p); failed++; last='send failed'; } } saveLS(); if(sent) showToast(`Synced %s ✓`%sent,'success'); if(failed) showToast(f'{failed} still queued','info'); }
-function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','info'); return; } if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return; S.queue=[]; saveLS(); showToast('Queue cleared ✓','success'); }
+// Queue helpers (fixed)
+async function retryQueue(){
+  if(!S.queue.length){ showToast('Queue empty','info'); return; }
+  const q=[...S.queue];
+  S.queue=[];
+  saveLS();
+  let sent=0, failed=0, lastErr='';
+  for(const item of q){
+    try{
+      const payload = {...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo};
+      if(!S.endpoint) throw new Error('No endpoint configured');
+      const r = await fetch(S.endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      sent++;
+    }catch(e){
+      failed++; lastErr=String(e);
+      S.queue.push(item);
+    }
+  }
+  saveLS();
+  if(sent) showToast(`Synced ${sent} ✓`,'success');
+  if(failed) showToast(`${failed} still queued${lastErr? ' ('+lastErr+')':''}`,'info');
+}
+function clearQueue(){
+  if(!S.queue.length){ showToast('Queue already empty','info'); return; }
+  if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return;
+  S.queue=[]; saveLS(); showToast('Queue cleared ✓','success');
+}
