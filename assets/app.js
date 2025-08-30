@@ -1,4 +1,4 @@
-// Consolidated v3: stats bar, no lead tracker filter, scripts without local cue, Declined with reason
+// Consolidated v4: scripts auto-season (no season dropdown), lead form fields per request, Declined reason, stats bar
 
 // --- State ---
 window.S = window.S || {
@@ -150,33 +150,45 @@ async function postVisit_geo(outcome){
   if(outcome==='Declined'){ objection = prompt('Reason for decline? (optional)', '') || ''; }
   const item={ type: outcome==='Lead'?'lead':'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
     address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection };
-
   if(S.endpoint){ const payload={...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo}; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('HTTP '+r.status);} catch(e){ S.queue.push(payload); saveLS(); } }
   S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
 }
 
-// Lead form (save -> dashboard)
+// Lead form — fields requested only
 function renderLead(){ el('#view').innerHTML=`<section class="card">${statsBarHTML()}<h2>New Lead</h2>
   <div class="field"><label>Name*</label><input id="l_name"></div>
   <div class="field"><label>Phone*</label><input id="l_phone" placeholder="(###) ###-####"></div>
   <div class="field"><label>Email</label><input id="l_email"></div>
   <div class="field"><label>Address</label><input id="l_addr" value="${S.geoList[S.geoPtr]?.addr||''}"></div>
-  <div class="field"><label>Status</label><select id="l_status"><option>New</option><option>Contacted</option><option>Scheduled</option><option>Closed Won</option><option>Closed Lost</option></select></div>
+  <div class="row">
+    <div class="field"><label>Service</label><select id="l_service"><option>Removal</option><option>Trim</option><option>Storm Prep</option><option>Planting</option><option>Other</option></select></div>
+    <div class="field"><label>Urgency</label><select id="l_urgency"><option>High</option><option>Medium</option><option>Low</option></select></div>
+    <div class="field"><label>Budget</label><select id="l_budget"><option>&lt;$500</option><option>$500+</option><option>$1k+</option></select></div>
+  </div>
+  <div class="field"><label>Notes</label><textarea id="l_notes" rows="4"></textarea></div>
   <div class="btn-row"><button class="primary" onclick="saveLead()">Save Lead</button><button class="ghost" onclick="go('dashboard')">Cancel</button></div>
 </section>`; }
-async function saveLead(){ const b={ type:'lead', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(), address:(el('#l_addr').value||'').trim(), name:(el('#l_name').value||'').trim(), phone:(el('#l_phone').value||'').trim(), email:(el('#l_email').value||'').trim(), status:(el('#l_status').value||'New'), rep:S.rep||'', source:'PWA', photos:[] };
+async function saveLead(){
+  const b={
+    type:'lead', date: new Date().toISOString().slice(0,10), time: new Date().toISOString(),
+    name:(el('#l_name').value||'').trim(), phone:(el('#l_phone').value||'').trim(), email:(el('#l_email').value||'').trim(),
+    address:(el('#l_addr').value||'').trim(), service: el('#l_service').value, urgency: el('#l_urgency').value,
+    budget: el('#l_budget').value, notes:(el('#l_notes').value||'').trim(), rep:S.rep||'', source:'PWA'
+  };
   if(!b.name){ showToast('Name required','error'); return; }
   if(S.endpoint){ const payload={...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo}; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('HTTP '+r.status);} catch(e){ S.queue.push(payload); saveLS(); } }
-  S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard'); }
+  S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
+}
 
-// Lead Tracker (no filter, show all, local delete)
+// Lead Tracker (no filter, with local delete)
 function renderTracker(){
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const list=(S.leadsLog||[]);
   el('#lt_list').innerHTML = list.map((l,i)=>`<div class="field">
-    <label>${esc(l.date||'')} — ${esc(l.name||'')} <span style="color:var(--muted)">(${esc(l.status||'New')})</span></label>
+    <label>${esc(l.date||'')} — ${esc(l.name||'')} <span style="color:var(--muted)">(${esc(l.service||'')})</span></label>
     <div class="row"><div><small>${esc(l.address||'')}</small></div><div><small>${esc(l.phone||'')}</small></div></div>
+    ${l.notes? `<div style="margin-top:.3rem"><small>${esc(l.notes)}</small></div>`:''}
     <div class="btn-row" style="margin-top:.4rem"><button class="ghost" data-del="${i}">❌ Delete</button></div>
   </div>`).join('') || '<div class="field"><label>No leads yet</label></div>';
   el('#lt_list').querySelectorAll('button[data-del]').forEach(btn=>btn.addEventListener('click',()=>{
@@ -186,23 +198,24 @@ function renderTracker(){
   }));
 }
 
-// Scripts (Season + Audience only; no Local Cue)
+// Scripts: auto-season (no season dropdown), audience only
 async function renderScripts(){
   let data=null; try{ data=await fetch('assets/scripts.json').then(r=>r.json()); }catch(_){}
-  data = data || {seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
-  const seasons=Object.keys(data.seasons), audiences=Object.keys(data.audience);
+  data = data || {seasons:{},audience:{},core:{opener:'',ask:'',close:''}};
+  // Compute season from current month
+  const m = new Date().getMonth()+1;
+  const season = (m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
+  const audiences=Object.keys(data.audience||{});
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Scripts</h2>
-    <div class="row">
-      <div class="field"><label>Season Cue</label><select id="sc_season">${seasons.map(s=>`<option>${s}</option>`).join('')}</select></div>
-      <div class="field"><label>Audience Cue</label><select id="sc_aud">${audiences.map(s=>`<option>${s}</option>`).join('')}</select></div>
-    </div>
+    <div class="field"><label>Season</label><input value="${season}" readonly/></div>
+    <div class="field"><label>Audience Cue</label><select id="sc_aud">${audiences.map(s=>`<option>${s}</option>`).join('')}</select></div>
     <div class="field"><label>Opener</label><input value="${(data.core.opener||'').replace(/"/g,'&quot;')}" readonly/></div>
     <div class="field"><label>Ask</label><input value="${(data.core.ask||'').replace(/"/g,'&quot;')}" readonly/></div>
     <div class="field"><label>Close</label><input value="${(data.core.close||'').replace(/"/g,'&quot;')}" readonly/></div>
     <div class="field"><label>Notes</label><textarea id="sc_preview" rows="3" readonly></textarea></div>
   </section>`;
-  const update=()=>{ const s=el('#sc_season').value||'', a=el('#sc_aud').value||''; el('#sc_preview').value=[data.seasons[s]||'', data.audience[a]||''].filter(Boolean).join(' • '); };
-  ['sc_season','sc_aud'].forEach(id=> el('#'+id).addEventListener('change', update)); update();
+  const update=()=>{ const a=el('#sc_aud').value||''; el('#sc_preview').value=[data.seasons?.[season]||'', data.audience?.[a]||''].filter(Boolean).join(' • '); };
+  el('#sc_aud').addEventListener('change', update); update();
 }
 
 // Settings
@@ -214,5 +227,5 @@ function renderSettings(){ el('#view').innerHTML = `<section class="card">${stat
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
 
 // Queue helpers
-async function retryQueue(){ if(!S.queue.length){ showToast('Queue empty','info'); return; } const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last=''; for(const p of q){ p.secret=S.secret; p.emailNotifyTo=S.emailNotifyTo; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); if(!r.ok) throw new Error('HTTP '+r.status); sent++; }catch(e){ S.queue.push(p); failed++; last='send failed'; } } saveLS(); if(sent) showToast(`Synced ${sent} ✓`,'success'); if(failed) showToast(`${failed} still queued ${last?'('+last+')':''}`,'info'); }
+async function retryQueue(){ if(!S.queue.length){ showToast('Queue empty','info'); return; } const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last=''; for(const p of q){ p.secret=S.secret; p.emailNotifyTo=S.emailNotifyTo; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); if(!r.ok) throw new Error('HTTP '+r.status); sent++; }catch(e){ S.queue.push(p); failed++; last='send failed'; } } saveLS(); if(sent) showToast(`Synced %s ✓`%sent,'success'); if(failed) showToast(f'{failed} still queued','info'); }
 function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','info'); return; } if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return; S.queue=[]; saveLS(); showToast('Queue cleared ✓','success'); }
