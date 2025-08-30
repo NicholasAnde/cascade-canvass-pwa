@@ -1,4 +1,4 @@
-// v4.3: Adds Map Today tab (Leaflet) showing today's visited houses; stores lat/lon on visits/leads; mobile-first.
+// v4.4: Map range toggle (Today / 7d), based on v4.3 mobile build
 
 // --- State ---
 window.S = window.S || {
@@ -112,7 +112,7 @@ function renderDashboard(){
         <button class="primary" onclick="go('knock')">Next Door</button>
         <button onclick="go('lead')">New Lead</button>
         <button onclick="go('tracker')">Lead Tracker</button>
-        <button onclick="go('maptoday')">Map Today</button>
+        <button onclick="go('maptoday')">Map</button>
         <button onclick="go('scripts')">Scripts</button>
         <button onclick="go('settings')">Settings</button>
       </div>
@@ -201,7 +201,55 @@ function renderTracker(){
   }));
 }
 
-// Scripts: auto-season + audience reference + rebuttals
+// Map (Today / 7d toggle)
+function renderMapToday(){
+  const t = todayISO();
+  const wk = weekAgoISO();
+  el('#view').innerHTML = `<section class="card"><h2>Map</h2>
+    <div class="field"><label>Range</label>
+      <div class="pills"><span class="pill active" data-range="today">Today</span><span class="pill" data-range="7d">7 days</span></div>
+    </div>
+    <div id="map" class="map"></div>
+  </section>`;
+
+  let range = 'today';
+  const pills = document.querySelectorAll('.pill');
+  pills.forEach(p=>p.addEventListener('click', ()=>{
+    pills.forEach(x=>x.classList.remove('active')); p.classList.add('active');
+    range = p.getAttribute('data-range'); draw();
+  }));
+
+  function getPoints(){
+    const all = (S.visitsLog||[]).filter(v => typeof v.lat==='number' && typeof v.lon==='number');
+    return range==='today' ? all.filter(v => (v.date||'').slice(0,10)===t) : all.filter(v => (v.date||'') >= wk);
+  }
+
+  function draw(){
+    const pts = getPoints();
+    if(!window.L) { showToast('Map library not loaded','error'); return; }
+    const map = L.map('map', {zoomControl:true});
+    const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
+    map.setView(start, pts[0]?16:12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+    if(pts.length){
+      const bounds = [];
+      pts.forEach(p=>{
+        const m = L.marker([p.lat, p.lon]).addTo(map);
+        const title = `${p.address||''}`;
+        const subtitle = `${p.outcome||'Visit'} • ${new Date(p.time||'').toLocaleTimeString()}`;
+        m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
+        bounds.push([p.lat, p.lon]);
+      });
+      if(bounds.length>1) map.fitBounds(bounds, {padding:[20,20]});
+    } else {
+      // No points — leave center where it is
+    }
+  }
+
+  setTimeout(draw, 0);
+}
+
+// Scripts
 async function renderScripts(){
   let data=null; try{ data=await fetch('assets/scripts.json').then(r=>r.json()); }catch(_){}
   data = data || {seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
@@ -226,34 +274,6 @@ async function renderScripts(){
       <div style="margin-top:.3rem"><small><b>A</b>) ${r[k].A}</small></div>
       <div style="margin-top:.1rem"><small><b>B</b>) ${r[k].B}</small></div>
     </div>`).join('') || '<small>No rebuttals</small>';
-}
-
-// Map Today — markers for today's visits with lat/lon
-function renderMapToday(){
-  const t = todayISO();
-  const pts = (S.visitsLog||[]).filter(v => (v.date||'').slice(0,10)===t && typeof v.lat==='number' && typeof v.lon==='number');
-  el('#view').innerHTML = `<section class="card"><h2>Map Today</h2>
-    <div id="map" class="map"></div>
-    ${pts.length? '' : '<div class="field"><label>No mapped visits today</label><div><small>New knocks from “Next Door” will appear here.</small></div></div>'}
-  </section>`;
-  setTimeout(()=>{
-    if(!window.L) { showToast('Map library not loaded','error'); return; }
-    const map = L.map('map');
-    const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
-    map.setView(start, pts[0]?16:12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
-    if(pts.length){
-      const bounds = [];
-      pts.forEach(p=>{
-        const m = L.marker([p.lat, p.lon]).addTo(map);
-        const title = `${p.address||''}`;
-        const subtitle = `${p.outcome||'Visit'} • ${new Date(p.time||'').toLocaleTimeString()}`;
-        m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
-        bounds.push([p.lat, p.lon]);
-      });
-      if(bounds.length>1) map.fitBounds(bounds, {padding:[20,20]});
-    }
-  }, 0);
 }
 
 // Settings

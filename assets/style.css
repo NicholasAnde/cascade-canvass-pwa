@@ -45,3 +45,7 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .bottom-actions button{flex:1}
 /* Map */
 .map{height:60vh;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+/* Toggle pills */
+.pills{display:flex;gap:.5rem}
+.pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
+.pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
