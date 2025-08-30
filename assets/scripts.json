@@ -10,17 +10,7 @@
     "Pros": "Most people hire us because it\u2019s faster than a weekend on a ladder.",
     "Retirees": "Peace of mind is the big win\u2014no surprises when wind picks up."
   },
-  "localCues": {
-    "Felida": "Older mature trees here\u2014we\u2019re doing a lot of safety trims.",
-    "Lake Shore": "Established homeowners\u2014storm-prep is popular here.",
-    "Camas": "Quick preventative trims so you don\u2019t have to block time off work.",
-    "East Vancouver": "Dense single-family streets\u2014fast preventative trims.",
-    "Hockinson / Brush Prairie": "Larger treed lots\u2014happy to check the big firs.",
-    "Salmon Creek": "Solid middle-upper neighborhoods with mature trees.",
-    "Ridgefield": "Newer builds\u2014preventative trims before growth takes off.",
-    "Washougal": "Hillside & Gorge exposure\u2014wind prep matters here.",
-    "Battle Ground": "Lots of single-family homes\u2014steady preventative work."
-  },
+  "localCues": {},
   "core": {
     "opener": "Hi, I\u2019m Nick with Cascade Tree Works. Quick question\u2014",
     "ask": "\u2014any trees you\u2019ve been meaning to trim or check before the weather?",

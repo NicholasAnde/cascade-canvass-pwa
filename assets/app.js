@@ -1,4 +1,4 @@
-// Full consolidated v2 app.js — routes + geocoder + cooldown + lead tracker delete + scripts + settings
+// Consolidated v3: stats bar, no lead tracker filter, scripts without local cue, Declined with reason
 
 // --- State ---
 window.S = window.S || {
@@ -8,9 +8,7 @@ window.S = window.S || {
   visitsLog: JSON.parse(localStorage.getItem('visitsLog') || '[]'),
   leadsLog: JSON.parse(localStorage.getItem('leadsLog') || '[]'),
   queue: JSON.parse(localStorage.getItem('queue') || '[]'),
-  // Geocoder
   geoList: [], geoPtr: 0, geoRadius: 150, geoLimit: 25, cooldownDays: 90,
-  // Scripts
   scriptStats: JSON.parse(localStorage.getItem('scriptStats') || '{}')
 };
 document.documentElement.dataset.theme = (S.theme === 'light') ? 'light' : '';
@@ -45,6 +43,25 @@ function showToast(message, type='success'){
   d.querySelector('.close').onclick=close; setTimeout(close, type==='error'?4200:2400);
 }
 const daysSince = iso => Math.floor((Date.now() - new Date(iso).getTime())/86400000);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+const weekAgoISO = ()=> new Date(Date.now()-6*86400000).toISOString().slice(0,10);
+
+// --- Stats bar ---
+function counts(){
+  const t = todayISO(); const wk = weekAgoISO();
+  const doorsToday = (S.visitsLog||[]).filter(v => (v.date||'').slice(0,10) === t).length;
+  const leadsToday = (S.leadsLog||[]).filter(l => (l.date||'').slice(0,10) === t).length;
+  const leadsWeek  = (S.leadsLog||[]).filter(l => (l.date||'') >= wk).length;
+  return {doorsToday, leadsToday, leadsWeek};
+}
+function statsBarHTML(){
+  const c = counts();
+  return `<div class="statsbar">
+    <div class="stat"><small>Doors Today</small><b>${c.doorsToday}</b></div>
+    <div class="stat"><small>Leads Today</small><b>${c.leadsToday}</b></div>
+    <div class="stat"><small>Leads (7d)</small><b>${c.leadsWeek}</b></div>
+  </div>`;
+}
 
 // --- Router ---
 function go(tab){
@@ -89,7 +106,7 @@ function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.g
 // --- Views ---
 function renderDashboard(){
   const addr = S.geoList[S.geoPtr]?.addr || '(tap Next Door to load nearby)';
-  el('#view').innerHTML = `<section class="card"><h2>Home</h2>
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
     <div class="btn-row">
       <button class="primary" onclick="go('knock')">Next Door</button>
       <button onclick="go('lead')">New Lead</button>
@@ -103,19 +120,20 @@ function renderDashboard(){
 }
 
 async function renderKnock_geo(){
-  if(!S.geoList.length){ const ok=await refreshGeoList(); if(!ok){ el('#view').innerHTML=`<section class="card"><h2>Next Door</h2>
+  if(!S.geoList.length){ const ok=await refreshGeoList(); if(!ok){ el('#view').innerHTML=`<section class="card">${statsBarHTML()}<h2>Next Door</h2>
     <div class="field"><label>Address*</label><input id="k_addr" placeholder="1208 Maple St"></div>
     <div class="field"><label>Notes</label><input id="k_notes" placeholder="Optional"></div>
     <div class="btn-row"><button class="primary" onclick="postVisit_geo('Lead')">Lead</button></div></section>`; return; } }
   if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr=n; }
   const cur=S.geoList[S.geoPtr]||{};
-  el('#view').innerHTML = `<section class="card"><h2>Next Door</h2>
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
     <div class="field"><label>Address*</label><input id="k_addr" value="${(cur.addr||'').replace(/"/g,'&quot;')}"></div>
     <div class="field"><label>Notes</label><input id="k_notes" placeholder="Optional"></div>
     <div class="btn-row">
       <button class="primary" ${cur.eligible?'':'disabled'} onclick="postVisit_geo('Lead')">Lead</button>
       <button ${cur.eligible?'':'disabled'} onclick="postVisit_geo('No Answer')">No Answer</button>
       <button ${cur.eligible?'':'disabled'} onclick="postVisit_geo('Left Literature')">Left Literature</button>
+      <button onclick="postVisit_geo('Declined')">Declined</button>
       <button onclick="postVisit_geo('Skipped')">Skip</button>
       <button onclick="advanceGeo()">Next Closest →</button>
       <button onclick="refreshGeoList()">Reload Nearby</button>
@@ -128,13 +146,17 @@ function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.g
 async function postVisit_geo(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); const notes=(el('#k_notes')?.value||'').trim();
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
-  const item={ type: outcome==='Lead'?'lead':'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(), address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection:'' };
+  let objection='';
+  if(outcome==='Declined'){ objection = prompt('Reason for decline? (optional)', '') || ''; }
+  const item={ type: outcome==='Lead'?'lead':'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
+    address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection };
+
   if(S.endpoint){ const payload={...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo}; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('HTTP '+r.status);} catch(e){ S.queue.push(payload); saveLS(); } }
   S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
 }
 
 // Lead form (save -> dashboard)
-function renderLead(){ el('#view').innerHTML=`<section class="card"><h2>New Lead</h2>
+function renderLead(){ el('#view').innerHTML=`<section class="card">${statsBarHTML()}<h2>New Lead</h2>
   <div class="field"><label>Name*</label><input id="l_name"></div>
   <div class="field"><label>Phone*</label><input id="l_phone" placeholder="(###) ###-####"></div>
   <div class="field"><label>Email</label><input id="l_email"></div>
@@ -147,51 +169,44 @@ async function saveLead(){ const b={ type:'lead', date:new Date().toISOString().
   if(S.endpoint){ const payload={...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo}; try{ const r=await fetch(S.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('HTTP '+r.status);} catch(e){ S.queue.push(payload); saveLS(); } }
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard'); }
 
-// Lead Tracker (read-only + delete local)
+// Lead Tracker (no filter, show all, local delete)
 function renderTracker(){
-  el('#view').innerHTML = `<section class="card"><h2>Lead Tracker</h2>
-    <div class="field"><label>Filter</label>
-      <select id="lt_filter"><option>All</option><option>New</option><option>Contacted</option><option>Scheduled</option><option>Closed Won</option><option>Closed Lost</option></select>
-    </div>
-    <div id="lt_list"></div></section>`;
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const renderList=()=>{ const f=el('#lt_filter').value||'All'; const list=(S.leadsLog||[]).filter(l=>f==='All'||(l.status||'New')===f);
-    el('#lt_list').innerHTML = list.map((l,i)=>`<div class="field">
-      <label>${esc(l.date||'')} — ${esc(l.name||'')} <span style="color:var(--muted)">(${esc(l.status||'New')})</span></label>
-      <div class="row"><div><small>${esc(l.address||'')}</small></div><div><small>${esc(l.phone||'')}</small></div></div>
-      <div class="btn-row" style="margin-top:.4rem"><button class="ghost" data-del="${i}">❌ Delete</button></div>
-    </div>`).join('') || '<div class="field"><label>No leads yet</label></div>';
-    el('#lt_list').querySelectorAll('button[data-del]').forEach(btn=>btn.addEventListener('click',()=>{
-      const idx=parseInt(btn.getAttribute('data-del'),10); const lead=(S.leadsLog||[])[idx]; if(!lead) return;
-      if(!confirm('Delete lead '+(lead.name||'')+'?')) return;
-      const ix = (S.leadsLog||[]).indexOf(lead); if(ix>=0){ S.leadsLog.splice(ix,1); saveLS(); showToast('Lead deleted (local) ✓','success'); renderList(); }
-    }));
-  };
-  el('#lt_filter').addEventListener('change', renderList); renderList();
+  const list=(S.leadsLog||[]);
+  el('#lt_list').innerHTML = list.map((l,i)=>`<div class="field">
+    <label>${esc(l.date||'')} — ${esc(l.name||'')} <span style="color:var(--muted)">(${esc(l.status||'New')})</span></label>
+    <div class="row"><div><small>${esc(l.address||'')}</small></div><div><small>${esc(l.phone||'')}</small></div></div>
+    <div class="btn-row" style="margin-top:.4rem"><button class="ghost" data-del="${i}">❌ Delete</button></div>
+  </div>`).join('') || '<div class="field"><label>No leads yet</label></div>';
+  el('#lt_list').querySelectorAll('button[data-del]').forEach(btn=>btn.addEventListener('click',()=>{
+    const idx=parseInt(btn.getAttribute('data-del'),10); const lead=(S.leadsLog||[])[idx]; if(!lead) return;
+    if(!confirm('Delete lead '+(lead.name||'')+'?')) return;
+    const ix = (S.leadsLog||[]).indexOf(lead); if(ix>=0){ S.leadsLog.splice(ix,1); saveLS(); showToast('Lead deleted (local) ✓','success'); renderTracker(); }
+  }));
 }
 
-// Scripts (loads scripts.json)
+// Scripts (Season + Audience only; no Local Cue)
 async function renderScripts(){
   let data=null; try{ data=await fetch('assets/scripts.json').then(r=>r.json()); }catch(_){}
-  data = data || {seasons:{},audience:{},localCues:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
-  const seasons=Object.keys(data.seasons), audiences=Object.keys(data.audience), locales=Object.keys(data.localCues);
-  el('#view').innerHTML = `<section class="card"><h2>Scripts</h2>
+  data = data || {seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
+  const seasons=Object.keys(data.seasons), audiences=Object.keys(data.audience);
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Scripts</h2>
     <div class="row">
       <div class="field"><label>Season Cue</label><select id="sc_season">${seasons.map(s=>`<option>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Audience Cue</label><select id="sc_aud">${audiences.map(s=>`<option>${s}</option>`).join('')}</select></div>
-      <div class="field"><label>Local Cue</label><select id="sc_loc">${locales.map(s=>`<option>${s}</option>`).join('')}</select></div>
     </div>
     <div class="field"><label>Opener</label><input value="${(data.core.opener||'').replace(/"/g,'&quot;')}" readonly/></div>
     <div class="field"><label>Ask</label><input value="${(data.core.ask||'').replace(/"/g,'&quot;')}" readonly/></div>
     <div class="field"><label>Close</label><input value="${(data.core.close||'').replace(/"/g,'&quot;')}" readonly/></div>
     <div class="field"><label>Notes</label><textarea id="sc_preview" rows="3" readonly></textarea></div>
   </section>`;
-  const update=()=>{ const s=el('#sc_season').value||'', a=el('#sc_aud').value||'', l=el('#sc_loc').value||''; el('#sc_preview').value=[data.seasons[s]||'', data.audience[a]||'', data.localCues[l]||''].filter(Boolean).join(' • '); };
-  ['sc_season','sc_aud','sc_loc'].forEach(id=> el('#'+id).addEventListener('change', update)); update();
+  const update=()=>{ const s=el('#sc_season').value||'', a=el('#sc_aud').value||''; el('#sc_preview').value=[data.seasons[s]||'', data.audience[a]||''].filter(Boolean).join(' • '); };
+  ['sc_season','sc_aud'].forEach(id=> el('#'+id).addEventListener('change', update)); update();
 }
 
-// Settings (theme + queue controls)
-function renderSettings(){ el('#view').innerHTML = `<section class="card"><h2>Settings</h2>
+// Settings
+function renderSettings(){ el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Settings</h2>
   <div class="field"><label>Rep Name</label><input id="s_rep" value="${S.rep||''}" placeholder="Your name"></div>
   <div class="field"><label>Theme</label><select id="s_theme"><option value="dark" ${S.theme==='dark'?'selected':''}>Dark</option><option value="light" ${S.theme==='light'?'selected':''}>Light (iOS)</option></select></div>
   <div class="btn-row"><button class="primary" onclick="savePrefs()">Save</button><button class="ghost" onclick="retryQueue()">Retry Queue (${S.queue.length})</button><button class="ghost" onclick="clearQueue()">Clear Queue</button></div>
