@@ -42,3 +42,7 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .toast .close{margin-left:auto;background:transparent;border:0;color:#aab;cursor:pointer;font-size:1.2rem;line-height:1;pointer-events:auto}
 @keyframes toast-in{to{opacity:1}}
 .err{position:fixed;left:0;right:0;bottom:calc(56px + var(--safe-bottom));background:#7f1d1d;color:#fff;padding:.5rem 1rem;font-size:.9rem;z-index:999}
+.map{height:60vh;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pills{display:flex;gap:.5rem}
+.pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
+.pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
