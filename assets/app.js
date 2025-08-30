@@ -1,4 +1,5 @@
-// v4.7: geocoder 'next door' restored, map Today/7d, lead photo uploads (scaled, up to 3), stacked buttons, pine icon.
+// v4.7.1 — photo attachments (gallery/camera + preview), geocoder next door, map today/7d, stacked buttons, pine icon.
+// Frontend only. Backend contract unchanged (but includes email attachments function in /backend).
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -12,7 +13,6 @@ window.S = window.S || {
 };
 document.documentElement.dataset.theme = (S.theme === 'light') ? 'light' : '';
 
-// load settings
 (async function(){
   try{
     const cfg = await fetch('./app.settings.json').then(r=>r.json());
@@ -43,7 +43,7 @@ const todayISO = ()=> new Date().toISOString().slice(0,10);
 const weekAgoISO = ()=> new Date(Date.now()-6*86400000).toISOString().slice(0,10);
 const daysSince = iso => Math.floor((Date.now() - new Date(iso).getTime())/86400000);
 
-// CORS-safe post
+// CORS-safe POST to Apps Script
 async function sendToScript(payload){
   if(!S.endpoint) throw new Error('No endpoint configured');
   const r = await fetch(S.endpoint, { method:'POST', body: JSON.stringify(payload) });
@@ -169,7 +169,7 @@ async function postVisit_geo(outcome){
   S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
 }
 
-// Lead form + photos
+// Lead form + photos (preview + scaling)
 function renderLead(){ el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>New Lead</h2>
   <div class="field"><label>Name*</label><input id="l_name" autocomplete="name"></div>
   <div class="field"><label>Phone*</label><input id="l_phone" inputmode="tel" autocomplete="tel" placeholder="(###) ###-####"></div>
@@ -179,9 +179,9 @@ function renderLead(){ el('#view').innerHTML = `<section class="card">${statsBar
   <div class="field"><label>Urgency</label><select id="l_urgency"><option>High</option><option>Medium</option><option>Low</option></select></div>
   <div class="field"><label>Budget</label><select id="l_budget"><option>&lt;$500</option><option>$500+</option><option>$1k+</option></select></div>
   <div class="field"><label>Notes</label><textarea id="l_notes" rows="4" enterkeyhint="done"></textarea></div>
-  <div class="field"><label>Photos (up to 3)</label><input id="l_photos" type="file" accept="image/*" capture="environment" multiple></div>
+  <div class="field"><label>Photos (up to 3)</label><input id="l_photos" type="file" accept="image/*" multiple><div id="l_preview" class="btn-row" style="margin-top:.4rem"></div></div>
   <div class="btn-row"><button class="primary" onclick="confirmLead()">Save Lead</button><button onclick="go('dashboard')">Cancel</button></div>
-</section>`; }
+</section>`; bindPhotoPreview(); }
 function confirmLead(){
   const name=(el('#l_name')?.value||'').trim(); const addr=(el('#l_addr')?.value||'').trim();
   if(!name){ showToast('Name required','error'); return; }
@@ -189,14 +189,14 @@ function confirmLead(){
   saveLead();
 }
 async function scalePhotos(input,max=3,maxW=1280){
-  const files = Array.from(input.files||[]).slice(0,max);
+  const files = Array.from(input.files || []).slice(0,max);
   const out = [];
   for (const f of files){
     const url = URL.createObjectURL(f);
     const img = new Image();
-    const res = await new Promise((resolve)=>{ img.onload=()=>resolve(); img.src=url; });
-    const scale = Math.min(1, maxW/img.naturalWidth);
-    const w = Math.round(img.naturalWidth*scale), h=Math.round(img.naturalHeight*scale);
+    await new Promise(res=>{ img.onload=res; img.src=url; });
+    const scale = Math.min(1, maxW/(img.naturalWidth||maxW));
+    const w = Math.round((img.naturalWidth||maxW)*scale), h=Math.round((img.naturalHeight||maxW)*scale);
     const c = document.createElement('canvas'); c.width=w; c.height=h;
     c.getContext('2d').drawImage(img,0,0,w,h);
     out.push(c.toDataURL('image/jpeg',0.85));
@@ -204,8 +204,21 @@ async function scalePhotos(input,max=3,maxW=1280){
   }
   return out;
 }
+function bindPhotoPreview(){
+  const input=document.getElementById('l_photos'); const tray=document.getElementById('l_preview'); if(!input||!tray) return;
+  input.addEventListener('change', ()=>{
+    tray.innerHTML='';
+    const files=Array.from(input.files||[]).slice(0,3);
+    for(const f of files){
+      const u=URL.createObjectURL(f); const img=new Image();
+      img.src=u; img.alt=f.name; img.style.cssText='width:72px;height:72px;object-fit:cover;border:1px solid var(--line);border-radius:10px;';
+      tray.appendChild(img); img.onload=()=>URL.revokeObjectURL(u);
+    }
+    if(files.length){ const s=document.createElement('small'); s.textContent=`Selected ${files.length} / 3`; s.style.cssText='opacity:.75;margin-top:.25rem;display:block;'; tray.appendChild(s); }
+  });
+}
 async function saveLead(){
-  const photos = el('#l_photos')?.files?.length ? await scalePhotos(el('#l_photos'),3,1280) : [];
+  const input=document.getElementById('l_photos'); const photos = (input && input.files && input.files.length) ? await scalePhotos(input,3,1280) : [];
   const b={ type:'lead', date:todayISO(), time:new Date().toISOString(),
     name:(el('#l_name').value||'').trim(), phone:(el('#l_phone').value||'').trim(), email:(el('#l_email').value||'').trim(),
     address:(el('#l_addr').value||'').trim(), service:el('#l_service').value, urgency:el('#l_urgency').value,
@@ -232,7 +245,7 @@ function renderTracker(){
   }));
 }
 
-// Scripts reference
+// Scripts
 async function renderScripts(){
   let data=null; try{ data=await fetch('assets/scripts.json').then(r=>r.json()); }catch(_){}
   data = data || {seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
@@ -258,7 +271,8 @@ async function renderScripts(){
     </div>`).join('') || '<small>No rebuttals</small>';
 }
 
-// Map Today / 7d
+// Map today / 7d (uses Leaflet loaded only when needed if added separately)
+// To keep the zip lightweight, we rely on the Leaflet CDN when you add it.
 function renderMapToday(){
   const t=todayISO(), wk=weekAgoISO();
   el('#view').innerHTML = `<section class="card"><h2>Map</h2>
@@ -275,7 +289,7 @@ function renderMapToday(){
   setTimeout(draw,0);
 }
 
-// Settings with Test POST
+// Settings + Test POST
 function renderSettings(){ el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Settings</h2>
   <div class="field"><label>Rep Name</label><input id="s_rep" value="${S.rep||''}" autocomplete="name"></div>
   <div class="field"><label>Theme</label><select id="s_theme"><option value="dark" ${S.theme==='dark'?'selected':''}>Dark</option><option value="light" ${S.theme==='light'?'selected':''}>Light (iOS)</option></select></div>
@@ -283,10 +297,10 @@ function renderSettings(){ el('#view').innerHTML = `<section class="card">${stat
   <div class="field"><label>Test Result</label><textarea id="adm_msg" rows="3" readonly placeholder="Run Test POST to see result"></textarea></div>
 </section>`; }
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
-async function testPost(){ const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; } const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'No Answer', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' }; try{ const text=await sendToScript(payload); box.value='HTTP 200\\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); } }
+async function testPost(){ const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; } const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'No Answer', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' }; try{ const text=await sendToScript(payload); box.value='HTTP 200\\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); }
 
 // Queue
-async function retryQueue(){ if(!S.queue.length){ showToast('Queue empty','info'); return; } const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last=''; for(const p of q){ try{ await sendToScript(p); sent++; }catch(e){ S.queue.push(p); failed++; last=String(e); } } saveLS(); if(sent) showToast(`Synced ${sent} ✓`,'success'); if(failed) showToast(`${failed} still queued${last?' ('+last+')':''}`,'info'); }
+async function retryQueue(){ if(!S.queue.length){ showToast('Queue empty','info'); return; } const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last=''; for(const p of q){ try{ await sendToScript(p); sent++; }catch(e){ S.queue.push(p); failed++; last=String(e);} } saveLS(); if(sent) showToast(`Synced ${sent} ✓`,'success'); if(failed) showToast(`${failed} still queued${last?' ('+last+')':''}`,'info'); }
 function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','info'); return; } if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return; S.queue=[]; saveLS(); showToast('Queue cleared ✓','success'); }
 
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
