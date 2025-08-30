@@ -33,9 +33,7 @@
 
   <main id="view"></main>
 
-  <footer class="foot">
-    <small>Mobile PWA</small>
-  </footer>
+  <footer class="foot"><small>Mobile PWA</small></footer>
 
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
@@ -49,7 +47,11 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(()=>{});
     }
-    window.addEventListener('error', e=>{ const box=document.getElementById('err'); box.style.display='block'; box.textContent = 'JS Error: '+(e.message||e.error||e); });
+    window.addEventListener('error', e=>{
+      const box=document.getElementById('err');
+      box.style.display='block';
+      box.textContent = 'JS Error: ' + (e.message || e.error || e);
+    });
     document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
   </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
