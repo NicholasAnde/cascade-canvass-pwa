@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>Cascade Canvass — PWA</title>
   <link rel="manifest" href="manifest.webmanifest"/>
   <meta name="theme-color" content="#111111"/>
@@ -14,6 +14,7 @@
   <header class="topbar">
     <button class="hamb" onclick="toggleDrawer()" aria-label="Menu"><span></span><span></span><span></span></button>
     <h1>Cascade Canvass</h1>
+    <button class="iconbtn" onclick="if(window.refreshGeoList) refreshGeoList()" aria-label="Reload nearby">⟳</button>
   </header>
 
   <aside id="drawer" class="drawer" aria-hidden="true">
@@ -29,7 +30,10 @@
   </aside>
 
   <main id="view"></main>
-  <footer class="foot"><small>Installable PWA</small></footer>
+
+  <footer class="foot">
+    <small>Mobile PWA</small>
+  </footer>
 
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
