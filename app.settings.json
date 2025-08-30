@@ -1,6 +1,6 @@
 {
-  "sheetsEndpoint": "https://script.google.com/macros/s/AKfycbyHH7CDy1u1oX3PjEdJgGL9MoIh5D-2_aegPPaSxKjKnECpakogw5v3qeifPbiOobJzfA/exec",
+  "sheetsEndpoint": "https://script.google.com/macros/s/AKfycbwxuM7h1NH1mC8BGUWv7g6Hy5zr2UyZLDf258smSJqayQMYtJUlq0lo0v3ZD_DwJ4I_iA/exec",
   "cooldownDays": 90,
-  "sharedSecret": "CHANGE_ME",
+  "sharedSecret": "Cascade",
   "emailNotifyTo": "nicholasande@gmail.com"
 }
