@@ -111,8 +111,6 @@ function renderDashboard(){
     </div>
   </section>`;
 }
-
-async 
 // === v4.8-nd: Next Door card (reverse lookup) ===
 function renderNextDoor(){
   el('#view').innerHTML = `<section class="card">
