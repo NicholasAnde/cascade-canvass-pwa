@@ -111,3 +111,9 @@ textarea { min-height: 100px; resize: vertical; }
 @media (min-width: 900px) {
   .split { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
 }
+
+.pill-warn { background:#2c240f; color:#f4e3a1; border-color:#4b4122; }
+
+.muted { color: var(--muted); }
+
+.nav-item.active { background:#0f2235; border:1px solid #1b3550; }

@@ -56,7 +56,7 @@ export function NextDoor() {
     const arr = Storage.get('doorKnocks', []); arr.push(record); Storage.set('doorKnocks', arr);
     // queue to sync
     Queue.add({ id: record.id, type: 'door_knock', payload: record });
-    toast('Saved');
+    toast(`Saved: ${outcome}`);
   }
 
   // auto locate once

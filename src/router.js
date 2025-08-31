@@ -18,9 +18,12 @@ const routes = {
 
 export function startRouter() {
   function render() {
+    const prev = document.querySelectorAll('.nav-item.active'); prev.forEach(n=>n.classList.remove('active'));
     const hash = location.hash || '#/dashboard';
     const path = hash.replace(/^#/, '');
     const View = routes[path] || Dashboard;
+    const active = document.querySelector(`a.nav-item[href='#${path}']`);
+    if (active) active.classList.add('active');
     const root = document.getElementById('app');
     root.innerHTML = '';
     const node = View();
