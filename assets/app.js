@@ -1,3 +1,65 @@
+/* v4.8.0-gps: inline settings */
+var SETTINGS = {
+  "version": "4.8.0-gps-address",
+  "features": {
+    "photos": false,
+    "mapMode": "legacy_4.7.2",
+    "gpsAddressAutoFill": true
+  },
+  "sheets": {
+    "scriptWebAppUrl": "https://script.google.com/macros/s/AKfycb_YOUR_DEPLOYED_WEBAPP_ID/exec",
+    "spreadsheetId": "YOUR_GOOGLE_SHEETS_ID",
+    "tabs": {
+      "leads": "Leads",
+      "visits": "Visits"
+    },
+    "headers": {
+      "leads": [
+        "Timestamp",
+        "Address",
+        "Name",
+        "Phone",
+        "Notes",
+        "Outcome",
+        "Lat",
+        "Lng",
+        "Source",
+        "AppVersion"
+      ],
+      "visits": [
+        "Timestamp",
+        "Address",
+        "Outcome",
+        "Lat",
+        "Lng",
+        "Notes",
+        "AppVersion"
+      ]
+    }
+  },
+  "email": {
+    "to": "leads@yourdomain.com",
+    "subjectPrefix": "Cascade Canvass Lead",
+    "includeLocation": true
+  },
+  "network": {
+    "timeoutMs": 8000,
+    "retry": {
+      "max": 2,
+      "backoffMs": 1200
+    }
+  },
+  "security": {
+    "allowedOrigins": [
+      "https://your-gh-pages-username.github.io/cascade-canvass"
+    ],
+    "requireHttps": true
+  },
+  "diagnostics": {
+    "logLevel": "warn"
+  }
+};
+
 // v4.7.2 — full app: geocoder Next Door + cooldown, Map Today/7d, lead photos (gallery/camera) + preview + scaling, CORS-safe posts, stacked buttons, pine icon, Test POST, queue, light/dark.
 
 window.S = window.S || {
@@ -171,7 +233,7 @@ function renderLead(){
     <div class="field"><label>Urgency</label><select id="l_urgency"><option>High</option><option>Medium</option><option>Low</option></select></div>
     <div class="field"><label>Budget</label><select id="l_budget"><option>&lt;$500</option><option>$500+</option><option>$1k+</option></select></div>
     <div class="field"><label>Notes</label><textarea id="l_notes" rows="4" enterkeyhint="done"></textarea></div>
-    <div class="field"><label>Photos (up to 3)</label><input id="l_photos" type="file" accept="image/*" multiple><div id="l_preview" class="btn-row" style="margin-top:.4rem"></div></div>
+    <div class="field"><label>Photos (up to 3)</label>/* v4.8.0-gps: photos removed */<div id="l_preview" class="btn-row" style="margin-top:.4rem"></div></div>
     <div class="btn-row"><button class="primary" onclick="confirmLead()">Save Lead</button><button onclick="go('dashboard')">Cancel</button></div>
   </section>`;
   bindPhotoPreview();
@@ -181,7 +243,7 @@ function confirmLead(){
   if(!name){ showToast('Name required','error'); return; }
   if(!confirm(`Save lead for:\\n${name}\\n${addr||''}?`)) return; saveLead();
 }
-async function readAsDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onerror=()=>rej(fr.error); fr.onload=()=>res(fr.result); fr.readAsDataURL(file); }); }
+async function readAsDataURL(file){ return new Promise((res,rej)=>{ const fr=new /* v4.8.0-gps: photos removed */; fr.onerror=()=>rej(fr.error); fr.onload=()=>res(fr.result); fr.readAsDataURL(file); }); }
 async function scaleDataUrl(dataUrl,maxW=1280,q=0.85){ return new Promise((resolve)=>{ const img=new Image(); img.onload=()=>{ const w=img.naturalWidth||maxW, h=img.naturalHeight||maxW; const s=Math.min(1,maxW/w); const W=Math.round(w*s), H=Math.round(h*s); const c=document.createElement('canvas'); c.width=W; c.height=H; c.getContext('2d').drawImage(img,0,0,W,H); resolve(c.toDataURL('image/jpeg',q)); }; img.src=dataUrl; }); }
 async function getScaledPhotosFromInput(input,max=3,maxW=1280){ const files=Array.from(input.files||[]).slice(0,max); const out=[]; for(const f of files){ const raw=await readAsDataURL(f); const jpeg=await scaleDataUrl(raw,maxW,0.85); out.push(jpeg); } return out; }
 function bindPhotoPreview(){ const input=el('#l_photos'), tray=el('#l_preview'); if(!input||!tray) return;
@@ -199,7 +261,7 @@ async function saveLead(){
     name:(el('#l_name').value||'').trim(), phone:(el('#l_phone').value||'').trim(), email:(el('#l_email').value||'').trim(),
     address:(el('#l_addr').value||'').trim(), service:el('#l_service').value, urgency:el('#l_urgency').value,
     budget:el('#l_budget').value, notes:(el('#l_notes').value||'').trim(), rep:S.rep||'', source:'PWA',
-    photosBase64:photos, photosCount:photos.length };
+    /* v4.8.0-gps: photos removed */
   try{ await sendToScript({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
@@ -295,3 +357,67 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 
 // Boot
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
+
+
+/* v4.8.0-gps: GPS → Address autofill (ES5) */
+(function(){
+  function formatNominatim(res){
+    try{
+      if (res.display_name) return res.display_name;
+      var a = res.address || {};
+      var parts = [];
+      if (a.house_number && a.road) parts.push(a.house_number + " " + a.road);
+      else if (a.road) parts.push(a.road);
+      if (a.city) parts.push(a.city);
+      if (a.town && !a.city) parts.push(a.town);
+      if (a.state) parts.push(a.state);
+      if (a.postcode) parts.push(a.postcode);
+      return parts.join(", ");
+    }catch(e){ return ""; }
+  }
+  function reverseGeocode(lat, lng, cb){
+    var url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18"
+            + "&lat=" + encodeURIComponent(lat)
+            + "&lon=" + encodeURIComponent(lng)
+            + "&email=" + encodeURIComponent("support@yourdomain.com");
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.setRequestHeader("Accept","application/json");
+    xhr.onreadystatechange = function(){
+      if (xhr.readyState===4){
+        try { cb(null, JSON.parse(xhr.responseText)); }
+        catch(e){ cb(e); }
+      }
+    };
+    xhr.onerror = function(){ cb(new Error("network")); };
+    xhr.send(null);
+  }
+  function ensureGeoButton(){
+    var addr = document.getElementById('address') || document.querySelector('[name=address]');
+    if (!addr || document.getElementById('btnGeoFill')) return;
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.id = 'btnGeoFill'; btn.title = 'Use current location'; btn.textContent = '📍';
+    btn.style.marginLeft = '8px'; btn.style.padding='6px 10px'; btn.style.borderRadius='8px';
+    if (addr.parentNode) addr.parentNode.insertBefore(btn, addr.nextSibling); else addr.after(btn);
+    btn.addEventListener('click', fillAddressFromGPS);
+  }
+  function fillAddressFromGPS(){
+    if (!navigator.geolocation){ alert("Geolocation not supported"); return; }
+    var btn = document.getElementById('btnGeoFill'); if (btn) btn.disabled = true;
+    navigator.geolocation.getCurrentPosition(function(pos){
+      var lat = pos.coords.latitude, lng = pos.coords.longitude;
+      reverseGeocode(lat, lng, function(err, data){
+        var input = document.getElementById('address') || document.querySelector('[name=address]');
+        var address = (!err && data) ? formatNominatim(data) : "";
+        if (!address) address = lat.toFixed(6) + ", " + lng.toFixed(6); // fallback (approved)
+        if (input) input.value = address;
+        if (btn) btn.disabled = false;
+      });
+    }, function(err){
+      alert("Location error: " + (err && err.message ? err.message : "unavailable"));
+      if (btn) btn.disabled = false;
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+  }
+  function wire(){ try{ ensureGeoButton(); }catch(e){} }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+})();

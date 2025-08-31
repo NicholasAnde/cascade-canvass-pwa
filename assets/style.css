@@ -46,3 +46,6 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pills{display:flex;gap:.5rem}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* v4.8.0-gps */
+#btnGeoFill{border:1px solid #333;background:#1e1e1e;color:#fff}
