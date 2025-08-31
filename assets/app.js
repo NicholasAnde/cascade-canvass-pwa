@@ -103,8 +103,9 @@ function renderDashboard(){
   </section>`;
 }
 // === v4.8-nd: Next Door card (reverse lookup) ===
+
 function renderNextDoor(){
-  el('#view').innerHTML = `<section class="card">
+  el('#view').innerHTML = `<section id="nd_card" class="card">
     <h2>Next Door</h2>
     <div class="field"><label>Address*</label>
       <input id="nd_addr" placeholder="Fetching current address…" autocomplete="street-address"/>
@@ -113,28 +114,71 @@ function renderNextDoor(){
       <input id="nd_note" placeholder="Optional"/>
     </div>
     <div class="btn-col">
-      <button class="primary" id="nd_lead">Lead</button>
+      <button type="button" class="primary" data-nd="lead">Lead</button>
       <div class="row">
-        <button id="nd_lit">Left Literature</button>
+        <button type="button" data-nd="lit">Left Literature</button>
         <div class="dropdown">
-          <button id="nd_decline_btn">Declined ▾</button>
+          <button type="button" data-nd="decline-btn">Declined ▾</button>
           <div class="menu" id="nd_decline_menu" hidden>
-            <button data-reason="No Need">No Need</button>
-            <button data-reason="Cost">Cost</button>
-            <button data-reason="Maybe Later">Maybe Later</button>
-            <button data-reason="Didn't Say">Didn't Say</button>
-            <button data-reason="Already Have Someone">Already Have Someone</button>
+            <button type="button" data-nd="decline-reason" data-reason="No Need">No Need</button>
+            <button type="button" data-nd="decline-reason" data-reason="Cost">Cost</button>
+            <button type="button" data-nd="decline-reason" data-reason="Maybe Later">Maybe Later</button>
+            <button type="button" data-nd="decline-reason" data-reason="Didn't Say">Didn't Say</button>
+            <button type="button" data-nd="decline-reason" data-reason="Already Have Someone">Already Have Someone</button>
           </div>
         </div>
-        <button id="nd_skip">Skip</button>
+        <button type="button" data-nd="skip">Skip</button>
       </div>
-      <button id="nd_update" class="ghost">Update Address</button>
+      <button type="button" class="ghost" data-nd="update">Update Address</button>
     </div>
   </section>`;
 
-  bindNextDoorHandlers();
-  nd_updateAddress(); // initial reverse lookup from current position
+  // Single delegated listener so buttons keep working after any re-renders
+  const card = document.getElementById('nd_card');
+  if (card && !card._wired){
+    card._wired = true;
+    console.debug('[NextDoor] binding events');
+    card.addEventListener('click', function(ev){
+      const btn = ev.target.closest('[data-nd]');
+      if (!btn) return;
+      const action = btn.getAttribute('data-nd');
+
+      if (action === 'decline-btn'){
+        const m = document.getElementById('nd_decline_menu');
+        if (m) m.hidden = !m.hidden;
+        return;
+      }
+      if (action === 'decline-reason'){
+        const r = btn.getAttribute('data-reason') || '';
+        nd_logOutcome('Declined', r);
+        const m = document.getElementById('nd_decline_menu'); if (m) m.hidden = true;
+        return;
+      }
+      if (action === 'lead'){
+        const addr = (document.getElementById('nd_addr')||{}).value || '';
+        window.prefillAddress = addr;
+        go('lead');
+        return;
+      }
+      if (action === 'lit'){
+        nd_logOutcome('Left Literature', null);
+        return;
+      }
+      if (action === 'skip'){
+        nd_logOutcome('Skip', null);
+        return;
+      }
+      if (action === 'update'){
+        nd_updateAddress();
+        return;
+      }
+    });
+  }
+
+  // Kick off reverse lookup after render
+  nd_updateAddress();
 }
+
 
 function bindNextDoorHandlers(){
   // Dropdown toggle
