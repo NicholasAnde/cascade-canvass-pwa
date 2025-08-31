@@ -7,8 +7,9 @@ window.S = window.S || {
   visitsLog: JSON.parse(localStorage.getItem('visitsLog') || '[]'),
   leadsLog: JSON.parse(localStorage.getItem('leadsLog') || '[]'),
   queue: JSON.parse(localStorage.getItem('queue') || '[]'),
-  geoList: [], geoPtr: 0, geoRadius: 150, geoLimit: 25, cooldownDays: 90
-, enableNextDoorLookup: (localStorage.getItem('enableNextDoorLookup')||'true')==='true'};
+  geoList: [], geoPtr: 0, geoRadius: 150, geoLimit: 25, cooldownDays: 90,
+  enableNextDoorLookup: (localStorage.getItem('enableNextDoorLookup')||'true')==='true'
+};
 document.documentElement.dataset.theme = (S.theme === 'light') ? 'light' : '';
 
 // Load config
@@ -67,31 +68,25 @@ function downloadCSV(name, rows){ if(!rows.length){ showToast('No data to export
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([toCSV(rows)],{type:'text/csv'})); a.download=name; a.click(); }
 
 // -------- geocoder + cooldown --------
-const KM=(a,b)=>Infinity; // geocoding removed: distance disabled
+const KM=(a,b)=>Infinity; // distance disabled
 function fmtAddr(tags){ const num=tags['addr:housenumber']||'', street=tags['addr:street']||tags['name']||'', unit=tags['addr:unit']||'', city=tags['addr:city']||tags['addr:suburb']||'';
   return [num,street,unit?('#'+unit):'',city].filter(Boolean).join(' ').replace(/\\s+/g,' ').trim(); }
 function lastIndex(){ return (S.visitsLog||[]).reduce((m,v)=>{ const a=(v.address||'').trim(), t=v.time||v.date||'';
   if(!a||!t) return m; if(!m[a]||new Date(t)>new Date(m[a])) m[a]=t; return m; },{}); }
 let _busy=false;
-async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
-  // geocoding removed: return empty list
-  return [];
-}
-async function refreshGeoList(){
-  if(!navigator.geolocation){ showToast('Geolocation not available','error'); return false; }
-  return new Promise(res=>{
-    /* geolocation removed */; S.geoPtr = 0; // geocoding removed showToast('Nearby loaded ✓','success'); res(true); }
-      catch(e){ showToast('Geocoder error','error'); res(false); }
-    }, ()=>{ showToast('Location error','error'); res(false); });
-  });
-}
+async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){ return []; }
+async function refreshGeoList(){ return false; }
 function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.geoList[i]?.eligible) return i; } return -1; }
 
 // -------- views --------
-async function refreshGeoList(){
-  // geocoding removed: nothing to refresh
-  return false;
-}
+function renderDashboard(){
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
+    <div class="btn-row">
+      <button class="primary" onclick="go('knock')">Next Door</button>
+      <button onclick="go('lead')">New Lead</button>
+      <button onclick="go('tracker')">Lead Tracker</button>
+      <button onclick="go('maptoday')">Map</button>
+      <button onclick="go('scripts')">Scripts</button>
       <button onclick="go('settings')">Settings</button>
     </div>
   </section>`;
@@ -110,7 +105,7 @@ async function renderKnock_geo(){
         <button onclick="confirmEnd()">End / Skip</button>
       </div>
     </section>`; return; } }
-  if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr = 0; // geocoding removed }
+  if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr=n; }
   const cur=S.geoList[S.geoPtr]||{};
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
     <div class="field"><label>Address*</label><input id="k_addr" autocomplete="street-address" value="${(cur.addr||'').replace(/"/g,'&quot;')}"></div>
@@ -131,7 +126,7 @@ function confirmVisit(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   if(!confirm(`Log "${outcome}" at:\\n${addr}?`)) return; postVisit_geo(outcome);
 }
-function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.geoPtr+1); S.geoPtr = 0; // geocoding removed renderKnock_geo(); }
+function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.geoPtr+1); S.geoPtr=(n>=0)?n:Math.min(S.geoPtr+1,S.geoList.length-1); renderKnock_geo(); }
 async function postVisit_geo(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); const notes=(el('#k_notes')?.value||'').trim();
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
@@ -253,22 +248,6 @@ function renderMapToday(){
       m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`); bounds.push([p.lat,p.lon]); });
       if(bounds.length>1) map.fitBounds(bounds,{padding:[20,20]}); } }
   setTimeout(draw,0);
-
-  // Ephemeral forward geocoding for text-only addresses
-  try{
-    const need = new Set();
-    (S.visitsLog||[]).forEach(v=>{ if(!(Number.isFinite(v.lat)&&Number.isFinite(v.lon)) && v.address) need.add(v.address); });
-    (S.leadsLog||[]).forEach(v=>{ if(!(Number.isFinite(v.lat)&&Number.isFinite(v.lon)) && v.address) need.add(v.address); });
-    const list = [...need];
-    if(list.length && window._mapTodayGeocode){
-      window._mapTodayGeocode.geocodeQueue(list, (addr,pt)=>{
-        try{
-          const m=L.marker([pt.lat, pt.lon]).addTo(map);
-          m.bindPopup(addr).openPopup();
-        }catch(e){}
-      });
-    }
-  }catch(e){}
 }
 
 // Settings + Test POST
@@ -298,210 +277,108 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
 
 
-/*NEXT_DOOR_FEATURE*/
+/* NEXT DOOR reverse lookup (on-demand, no storage) */
 (() => {
-  // Guard & settings
   const LS = {
-    get(key, def){ try{ const v = localStorage.getItem(key); return v==null? def : (v==='true'? true : (v==='false'? false : v)); }catch(_){ return def; } },
-    set(key, val){ try{ localStorage.setItem(key, String(val)); }catch(_){} }
+    get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:(v==='true'?true:v==='false'?false:v);}catch(_){return d;} },
+    set(k,v){ try{ localStorage.setItem(k,String(v)); }catch(_){} }
   };
-  if (typeof window.S === 'undefined') window.S = {};
-  if (typeof S.enableNextDoorLookup === 'undefined') S.enableNextDoorLookup = LS.get('enableNextDoorLookup', true);
+  if(typeof window.S==='undefined') window.S={};
+  if(typeof S.enableNextDoorLookup==='undefined') S.enableNextDoorLookup=LS.get('enableNextDoorLookup',true);
 
-  // Small helpers
-  function $(sel,root=document){ return root.querySelector(sel); }
-  function $all(sel,root=document){ return Array.from(root.querySelectorAll(sel)); }
-  function toast(msg){ try{ if(window.showToast) return showToast(msg,'info'); }catch(_){} alert(msg); }
-  function bestAddressFrom(data){
-    const addr = (data && data.address) || {};
-    const parts = [];
-    const hn = addr.house_number || "";
-    const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
-    const line1 = [hn, road].filter(Boolean).join(" ").trim();
-    if(line1) parts.push(line1);
-    const city = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || "";
-    const state = addr.state || "";
-    const pc = addr.postcode || "";
-    const cityStateZip = [city, [state, pc].filter(Boolean).join(" ")].filter(Boolean).join(", ").trim();
-    if(cityStateZip) parts.push(cityStateZip);
-    return parts.join(", ");
-  }
+  function $(s,r=document){ return r.querySelector(s); }
+  function $all(s,r=document){ return Array.from(r.querySelectorAll(s)); }
+  function toast(m){ try{ if(window.showToast) return showToast(m,'info'); }catch(_){} }
 
-  // Inject button next to likely address inputs (id contains address/addr/street)
   function findAddressInputs(){
-    const candidates = $all('input[id*=\"address\" i], input[id*=\"addr\" i], input[id*=\"street\" i]');
-    // De-dup by element
-    return candidates.filter((el, i, a) => a.indexOf(el)===i);
+    return $all('input[id*="address" i],input[id*="addr" i],input[id*="street" i]');
   }
-
+  function bestAddressFrom(data){
+    const a=(data&&data.address)||{};
+    const hn=a.house_number||"";
+    const road=a.road||a.pedestrian||a.footway||a.path||"";
+    const city=a.city||a.town||a.village||a.hamlet||a.suburb||"";
+    const st=a.state||""; const pc=a.postcode||"";
+    const line1=[hn,road].filter(Boolean).join(" ").trim();
+    const line2=[city,[st,pc].filter(Boolean).join(" ")].filter(Boolean).join(", ").trim();
+    return [line1,line2].filter(Boolean).join(", ");
+  }
   function ensureButtonFor(input){
-    if (!input) return;
-    if (input.dataset.nextDoorBound === '1') return;
-    input.dataset.nextDoorBound = '1';
-    // Make a small button element
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn next-door-btn';
-    btn.title = 'Use your current location once to fill the address';
-    btn.textContent = 'Next Door';
-    btn.style.marginLeft = '8px';
-    // Fallback link area
-    const fx = document.createElement('span');
-    fx.className = 'next-door-fallback';
-    fx.style.marginLeft = '8px';
-
-    // Insert after input
+    if(!input||input.dataset.nextDoorBound==='1') return;
+    input.dataset.nextDoorBound='1';
+    const btn=document.createElement('button'); btn.type='button'; btn.className='btn next-door-btn'; btn.textContent='Next Door';
+    btn.title='Use your current location once to fill the address'; btn.style.marginLeft='8px';
+    const fx=document.createElement('span'); fx.className='next-door-fallback'; fx.style.marginLeft='8px';
     input.insertAdjacentElement('afterend', fx);
     input.insertAdjacentElement('afterend', btn);
-
-    btn.addEventListener('click', async () => {
-      if (!S.enableNextDoorLookup) { toast('Next Door is disabled in Settings.'); return; }
-      if (!('geolocation' in navigator)) { toast('Geolocation not available on this device.'); return; }
-      // One-time geolocation
-      const pos = await new Promise((resolve, reject) => {
-        let done = false;
-        const id = navigator.geolocation.getCurrentPosition(
-          p => { if(done) return; done=true; resolve(p); },
-          e => { if(done) return; done=true; reject(e); },
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
-        );
-        setTimeout(()=>{ if(!done){ done=true; reject(new Error('timeout')); } }, 6000);
-      }).catch(err => { toast('Couldn\\'t get your location.'); return null; });
-      if (!pos) return;
-
-      const lat = pos.coords.latitude, lon = pos.coords.longitude;
-
-      // Reverse geocode via Nominatim (text-only extraction)
-      let data = null;
-      try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&addressdetails=1&email=${encodeURIComponent('nicholasande@gmail.com')}`;
-        const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        data = await r.json();
-      } catch(e){
-        toast('Lookup failed — try again or type your address.');
-        return;
-      }
-      if(!data) return;
-      const parsed = bestAddressFrom(data);
-      const fullText = data.display_name || '';
-
-      if (parsed){
-        input.value = parsed;
-        input.dispatchEvent(new Event('input', {bubbles:true}));
-        toast('Address filled. Review and edit if needed.');
-      } else if (fullText){
-        input.value = fullText;
-        input.dispatchEvent(new Event('input', {bubbles:true}));
-        toast('Used full address text. Review and edit if needed.');
-      } else {
-        toast('No address found — please type it.');
-      }
-
-      // Offer a fallback: if parsed and fullText differ, provide a quick insert link
-      fx.innerHTML = '';
-      if (fullText && parsed && fullText !== parsed){
-        const a = document.createElement('button');
-        a.type = 'button';
-        a.className = 'linklike';
-        a.textContent = 'Use full text instead';
-        a.addEventListener('click', () => {
-          input.value = fullText;
-          input.dispatchEvent(new Event('input', {bubbles:true}));
-          toast('Used full address text.');
-          fx.innerHTML='';
+    btn.addEventListener('click', async ()=>{
+      if(!S.enableNextDoorLookup){ toast('Next Door is disabled in Settings.'); return; }
+      if(!('geolocation' in navigator)){ toast('Geolocation not available'); return; }
+      let pos=null;
+      try{
+        pos = await new Promise((resolve,reject)=>{
+          let done=false;
+          navigator.geolocation.getCurrentPosition(
+            p=>{ if(done) return; done=true; resolve(p); },
+            e=>{ if(done) return; done=true; reject(e); },
+            { enableHighAccuracy:false, timeout:5000, maximumAge:0 }
+          );
+          setTimeout(()=>{ if(!done){ done=true; reject(new Error('timeout')); } }, 6000);
         });
+      }catch(_){ toast('Couldn\'t get your location'); return; }
+      if(!pos) return;
+      const lat=pos.coords.latitude, lon=pos.coords.longitude;
+      let data=null;
+      try{
+        const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&addressdetails=1&email=${encodeURIComponent('nicholasande@gmail.com')}`;
+        const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('HTTP '+r.status); data=await r.json();
+      }catch(_){ toast('Lookup failed — type your address'); return; }
+      const parsed=bestAddressFrom(data); const full=data&&data.display_name||'';
+      if(parsed){ input.value=parsed; input.dispatchEvent(new Event('input',{bubbles:true})); toast && toast('Address filled — review it'); }
+      else if(full){ input.value=full; input.dispatchEvent(new Event('input',{bubbles:true})); toast && toast('Used full address text — review it'); }
+      else { toast && toast('No address found — type it'); }
+      fx.innerHTML='';
+      if(full && parsed && full!==parsed){
+        const a=document.createElement('button'); a.type='button'; a.className='linklike'; a.textContent='Use full text instead';
+        a.addEventListener('click', ()=>{ input.value=full; input.dispatchEvent(new Event('input',{bubbles:true})); fx.innerHTML=''; });
         fx.appendChild(a);
       }
     });
   }
+  function scan(){ findAddressInputs().forEach(ensureButtonFor); }
+  document.addEventListener('DOMContentLoaded', scan);
+  window.addEventListener('hashchange', ()=>setTimeout(scan,0));
+  window.addEventListener('popstate', ()=>setTimeout(scan,0));
+  setInterval(scan, 1000);
 
-  function scanAndAttach(){
-    findAddressInputs().forEach(ensureButtonFor);
-  }
-
-  // Re-scan on renders
-  document.addEventListener('DOMContentLoaded', scanAndAttach);
-  window.addEventListener('hashchange', () => setTimeout(scanAndAttach, 0));
-  window.addEventListener('popstate', () => setTimeout(scanAndAttach, 0));
-  // In case app re-renders main view without navigation:
-  setInterval(scanAndAttach, 1000);
-
-  // Minimal styles (inline) — safe, tiny.
-  const style = document.createElement('style');
-  style.textContent = `.next-door-btn{font-size:.875rem; padding:.35rem .6rem; border-radius:.5rem; border:1px solid var(--fg-2, #aaa); background:transparent; cursor:pointer}
-  .next-door-btn:hover{opacity:.9}
-  .next-door-fallback .linklike{font-size:.825rem; text-decoration:underline; background:none; border:none; cursor:pointer; padding:0; margin:0;}`;
+  const style=document.createElement('style');
+  style.textContent=`.next-door-btn{font-size:.875rem;padding:.35rem .6rem;border-radius:.5rem;border:1px solid var(--fg-2,#aaa);background:transparent;cursor:pointer}
+.next-door-btn:hover{opacity:.9}.next-door-fallback .linklike{font-size:.825rem;text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;margin:0}`;
   document.head.appendChild(style);
 })();
 
-
-
-/*NEXT_DOOR_SETTINGS*/
+/* NEXT DOOR Settings toggle injection */
 (() => {
   function injectToggle(){
-    const view = document.getElementById('view');
-    if(!view) return;
+    const view=document.getElementById('view'); if(!view) return;
     if(view.dataset.nextDoorSettings==='1') return;
-    // Look for Settings heading
-    const h2 = view.querySelector('h2');
-    if(!h2 || !/Settings/i.test(h2.textContent||'')) return;
-    // Create field
-    const wrap = document.createElement('div');
-    wrap.className = 'field';
-    wrap.innerHTML = `<label>Enable Next Door lookup</label>
-      <select id="s_nextdoor">
-        <option value="true"${S.enableNextDoorLookup?' selected':''}>On</option>
-        <option value="false"${!S.enableNextDoorLookup?' selected':''}>Off</option>
-      </select>`;
+    const h2=view.querySelector('h2'); if(!h2 || !/Settings/i.test(h2.textContent||'')) return;
+    const wrap=document.createElement('div'); wrap.className='field';
+    wrap.innerHTML=`<label>Enable Next Door lookup</label>
+      <select id="s_nextdoor"><option value="true"${S.enableNextDoorLookup?' selected':''}>On</option>
+      <option value="false"${!S.enableNextDoorLookup?' selected':''}>Off</option></select>`;
     h2.insertAdjacentElement('afterend', wrap);
     view.dataset.nextDoorSettings='1';
-    // Hook into existing save button if present
-    const saveBtn = view.querySelector('button.primary');
-    if (saveBtn){
-      const orig = saveBtn.onclick;
-      saveBtn.onclick = function(ev){
-        const val = (document.getElementById('s_nextdoor')||{}).value;
-        if (val!=null){
-          S.enableNextDoorLookup = String(val)==='true';
-          try{ localStorage.setItem('enableNextDoorLookup', String(S.enableNextDoorLookup)); }catch(e){}
-        }
-        if (orig) return orig.call(this, ev);
+    const saveBtn=view.querySelector('button.primary');
+    if(saveBtn){
+      const orig=saveBtn.onclick;
+      saveBtn.onclick=function(ev){
+        const v=(document.getElementById('s_nextdoor')||{}).value;
+        if(v!=null){ S.enableNextDoorLookup=String(v)==='true'; try{ localStorage.setItem('enableNextDoorLookup', String(S.enableNextDoorLookup)); }catch(e){} }
+        if(orig) return orig.call(this, ev);
       };
     }
   }
   document.addEventListener('DOMContentLoaded', injectToggle);
   setInterval(injectToggle, 1000);
-})();
-
-
-/* MAP TODAY — ephemeral forward geocoding */
-(() => {
-  if (!window._mapGeoCache) window._mapGeoCache = new Map();
-  let _mapGeoBusy = false;
-  async function geocodeOnce(addr){
-    if(!addr) return null;
-    const key = addr.trim().toLowerCase();
-    if(_mapGeoCache.has(key)) return _mapGeoCache.get(key);
-    try{
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=0&q=${encodeURIComponent(addr)}&email=${encodeURIComponent('nicholasande@gmail.com')}`;
-      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const arr = await r.json();
-      const hit = (arr && arr[0]) ? { lat: parseFloat(arr[0].lat), lon: parseFloat(arr[0].lon) } : null;
-      _mapGeoCache.set(key, hit);
-      return hit;
-    } catch(e){ _mapGeoCache.set(key, null); return null; }
-  }
-  async function geocodeQueue(addrs, onPoint){
-    if(_mapGeoBusy) return; _mapGeoBusy = true;
-    try{
-      for(const a of addrs){
-        const pt = await geocodeOnce(a);
-        if(pt && typeof onPoint === 'function'){ onPoint(a, pt); }
-        await new Promise(r=>setTimeout(r, 600));
-      }
-    } finally { _mapGeoBusy = false; }
-  }
-  window._mapTodayGeocode = { geocodeQueue };
 })();
