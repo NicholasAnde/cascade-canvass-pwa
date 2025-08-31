@@ -4,12 +4,19 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>Cascade Canvass — PWA</title>
+
+  <!-- PWA basics -->
   <link rel="manifest" href="manifest.webmanifest"/>
   <meta name="theme-color" content="#111111"/>
+
+  <!-- Icons -->
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+
+  <!-- Leaflet styles -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App styles -->
   <link rel="stylesheet" href="assets/style.css"/>
 </head>
 <body>
@@ -32,7 +39,10 @@
     </nav>
   </aside>
 
-  <main id="view"></main>
+  <main id="view">
+    <!-- Optional: explicit map host so we don't rely on JS injection -->
+    <div id="map" style="width:100%;height:calc(100vh - 120px);border-radius:10px;background:#0b0e14"></div>
+  </main>
 
   <footer class="foot"><small>Mobile PWA</small></footer>
 
@@ -42,20 +52,30 @@
   <script>
     function toggleDrawer(){
       const d=document.getElementById('drawer');
-      d.classList.toggle('open'); d.setAttribute('aria-hidden', !d.classList.contains('open'));
+      d.classList.toggle('open');
+      d.setAttribute('aria-hidden', !d.classList.contains('open'));
     }
     function nav(tab){ toggleDrawer(); if(window.go) go(tab); }
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(()=>{});
+      // Dev-mode unregister; remove or guard behind env flag for production
+      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(function(){});
     }
-    window.addEventListener('error', e=>{
+    window.addEventListener('error', function(e){
       const box=document.getElementById('err');
       box.style.display='block';
       box.textContent = 'JS Error: ' + (e.message || e.error || e);
     });
-    document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.go) { go('dashboard'); }
+      else { document.getElementById('view').insertAdjacentHTML('afterbegin','<section class="card"><h2>Loading…</h2></section>'); }
+    });
   </script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="assets/app.js"></script>
-<div id="next-door-global"><!--NEXT_DOOR_GLOBAL--></div></body>
+
+  <!-- Scripts (defer so DOM is ready before they execute) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <script src="assets/app.js" defer></script>
+
+  <div id="next-door-global"><!--NEXT_DOOR_GLOBAL--></div>
+</body>
 </html>
+
