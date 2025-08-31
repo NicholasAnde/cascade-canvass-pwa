@@ -1,0 +1,113 @@
+
+:root {
+  --bg: #0b0f15;
+  --panel: #101722;
+  --panel-2: #0f141c;
+  --text: #e6eefc;
+  --muted: #9fb0c6;
+  --accent: #5aa2ff;
+  --ok: #2ecc71;
+  --warn: #f1c40f;
+  --err: #e74c3c;
+  --border: #182231;
+  --shadow: rgba(0,0,0,0.35);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.app { display: grid; grid-template-rows: 56px 1fr; }
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 30;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.title { font-size: 18px; font-weight: 600; margin: 0; }
+.hamburger {
+  background: transparent; color: var(--text); border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 10px; cursor: pointer;
+}
+.pill {
+  margin-left: auto; font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border);
+}
+.pill-idle { background: #121a25; }
+.pill-sync { background: #0f2235; color: #a8d1ff; border-color: #1b3550; }
+.pill-ok { background: #0f1f17; color: #7de2a8; border-color: #224a36; }
+.pill-err { background: #2b1416; color: #ff9aa4; border-color: #4a1f23; }
+
+.drawer {
+  position: fixed; inset: 0 40% 0 -100%; max-width: 300px;
+  background: var(--panel-2); border-right: 1px solid var(--border);
+  transition: transform .25s ease; transform: translateX(-100%);
+  z-index: 50; box-shadow: 6px 0 24px var(--shadow);
+}
+.drawer.open { transform: translateX(0); }
+.drawer-header { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); }
+.logo { width: 36px; height: 36px; border-radius: 8px; }
+.brand { font-weight: 700; }
+.sub { font-size: 12px; color: var(--muted); }
+.drawer-close {
+  margin-left: auto; background: transparent; color: var(--muted); border: none; font-size: 18px; cursor: pointer;
+}
+.nav { display: flex; flex-direction: column; padding: 8px; gap: 2px; }
+.nav-item {
+  display: block; padding: 10px 12px; border-radius: 10px; color: var(--text);
+}
+.nav-item:hover { background: #131b27; text-decoration: none; }
+
+.view { padding: 12px; }
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 12px;
+  box-shadow: 0 6px 20px var(--shadow);
+}
+.grid {
+  display: grid; gap: 12px;
+}
+.grid.cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.card {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 16px; padding: 14px;
+}
+.card h3 { margin: 0 0 6px; font-size: 14px; color: var(--muted); font-weight: 600; }
+.card .big { font-size: 28px; font-weight: 800; letter-spacing: 0.3px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #111925; color: var(--text); border: 1px solid var(--border);
+  padding: 10px 12px; border-radius: 12px; cursor: pointer;
+}
+.btn:hover { background: #0f1824; }
+.btn.primary { background: #0f2235; border-color: #1b3550; }
+.btn.good { background: #102017; border-color: #244b34; }
+.btn.warn { background: #2c240f; border-color: #4b4122; }
+.btn.danger { background: #2b1416; border-color: #4a1f23; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.field { display: grid; gap: 6px; margin: 8px 0; }
+.field label { font-size: 12px; color: var(--muted); }
+.input, select, textarea {
+  background: #0f141c; border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+  padding: 10px;
+}
+textarea { min-height: 100px; resize: vertical; }
+
+.toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: #0f2235; color: #a8d1ff; border: 1px solid #1b3550;
+  border-radius: 12px; padding: 10px 12px; box-shadow: 0 6px 24px var(--shadow);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+}
+.toast.show { opacity: 1; }
+
+.leaflet-container { height: 60vh; border-radius: 16px; border: 1px solid var(--border); }
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; }
+.table th { color: var(--muted); font-weight: 600; }
+
+@media (min-width: 900px) {
+  .split { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+}

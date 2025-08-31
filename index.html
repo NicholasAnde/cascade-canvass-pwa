@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cascade Canvass — Dashboard</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0b0f15">
+  <link rel="icon" href="/assets/icons/icon-192.png">
+  <!-- Leaflet (CDN, cached by SW) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="/assets/styles.css"/>
+</head>
+<body class="app">
+  <header class="topbar">
+    <button id="hamburger" aria-label="Open Menu" class="hamburger">☰</button>
+    <h1 class="title">Cascade Canvass</h1>
+    <div id="sync-pill" class="pill pill-idle" title="Sync status">Idle</div>
+  </header>
+
+  <aside id="drawer" class="drawer">
+    <div class="drawer-header">
+      <img src="/assets/icons/icon-192.png" alt="Logo" class="logo">
+      <div>
+        <div class="brand">Cascade Canvass</div>
+        <div class="sub">App Build 4 — Dashboard</div>
+      </div>
+      <button id="drawerClose" class="drawer-close" aria-label="Close Menu">✕</button>
+    </div>
+    <nav class="nav">
+      <a href="#/dashboard" class="nav-item">🏠 Dashboard</a>
+      <a href="#/nextdoor" class="nav-item">🚪 Next Door</a>
+      <a href="#/map" class="nav-item">🗺️ Map</a>
+      <a href="#/lead" class="nav-item">📝 New Lead</a>
+      <a href="#/scripts" class="nav-item">📜 Scripts</a>
+      <a href="#/queue" class="nav-item">📡 Sync Queue</a>
+      <a href="#/settings" class="nav-item">⚙️ Settings</a>
+    </nav>
+  </aside>
+
+  <main id="app" class="view"></main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/src/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>
