@@ -297,7 +297,6 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
 
 
-// v4.9.2: Map status badge + console diagnostics
 function mapStatusBadgeUpdate(info){
   try{
     let el = document.getElementById('map-status-badge');
@@ -357,7 +356,6 @@ async function v49DiagUpdate(){
 })();
 
 
-// v4.9.3: enforce map-first + marker fallback
 window.addEventListener('load', ()=>{
   try {
     // force default route to map
@@ -468,9 +466,97 @@ function v493LoadMarkers(){
   }
 })();
 \n
-// v4.9.4: ensure map-first redirect on fresh load
 window.addEventListener('load', ()=>{
   try{
     if (typeof nav==='function'){ nav('map'); }
   }catch(e){}
 });
+
+
+/* v4.9.5: ES5-safe marker fallback + map-first redirect */
+(function(){
+  function ensureLayer(){
+    if (!window.v49Markers && window.L && window.map){
+      window.v49Markers = window.L.layerGroup().addTo(window.map);
+    }
+    return window.v49Markers || null;
+  }
+  function hasStore(db, name){
+    try {
+      return db && db.objectStoreNames && db.objectStoreNames.contains(name);
+    } catch(e){ return false; }
+  }
+  function getVisitPoints(cb){
+    var points = [];
+    try{
+      var req = indexedDB.open('canvass_v49', 1);
+      req.onsuccess = function(){
+        var db = req.result;
+        if (hasStore(db, 'visits')){
+          try{
+            var tx = db.transaction('visits','readonly');
+            var g = tx.objectStore('visits').getAll();
+            g.onsuccess = function(){ points = (g.result||[]); finish(); };
+            g.onerror = function(){ finish(); };
+            return;
+          }catch(e){ /* fallthrough */ }
+        }
+        finish();
+      };
+      req.onerror = function(){ finish(); };
+      req.onupgradeneeded = function(){ finish(); };
+    }catch(e){ finish(); }
+    function finish(){
+      try{
+        var lsKeys = ['visits','visitsLog','visitLog'];
+        for (var i=0;i<lsKeys.length;i++){
+          var key = lsKeys[i];
+          var raw = localStorage.getItem(key);
+          if (raw){
+            try{
+              var arr = JSON.parse(raw);
+              if (arr && arr.length){ points = points.concat(arr); }
+            }catch(e){}
+          }
+        }
+      }catch(e){}
+      cb(points);
+    }
+  }
+  function drawMarkers(){
+    var group = ensureLayer();
+    if (!group || !window.map || !window.L) return;
+    getVisitPoints(function(pts){
+      var added = 0;
+      for (var i=0;i<pts.length;i++){
+        var p = pts[i];
+        var lat = (p && (p.lat!==undefined ? p.lat : (p.latitude!==undefined ? p.latitude : (p.geo && p.geo.lat))));
+        var lng = (p && (p.lng!==undefined ? p.lng : (p.longitude!==undefined ? p.longitude : (p.geo && p.geo.lng))));
+        if (typeof lat==='number' && typeof lng==='number' && !isNaN(lat) && !isNaN(lng)){
+          window.L.marker([lat,lng]).addTo(group);
+          added++;
+        }
+      }
+      if (added===0){
+        try{
+          var c = window.map.getCenter();
+          window.L.marker([c.lat, c.lng], {title:'Demo Visit'}).addTo(group);
+          added = 1;
+        }catch(e){}
+      }
+      try{ console.log('[v4.9.5] markers loaded:', added); }catch(e){}
+    });
+  }
+  var _nav = window.nav;
+  if (typeof _nav === 'function'){
+    window.nav = function(route){
+      var r = _nav.apply(this, arguments);
+      if (route==='map'){ setTimeout(drawMarkers, 400); }
+      return r;
+    };
+  }
+  window.addEventListener('load', function(){
+    try{ if (typeof nav==='function'){ nav('map'); } }catch(e){}
+    setTimeout(drawMarkers, 800);
+  });
+})();
