@@ -18,6 +18,7 @@ export async function renderMapTab({ mountEl, getRep }){
   const map = L.map('map').setView([45.6387,-122.6615], 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution:'&copy; OpenStreetMap' }).addTo(map);
+  window._leafletMapInstance = map;
 
   try{
     const data = await listDoors(365);
@@ -66,6 +67,16 @@ export async function renderMapTab({ mountEl, getRep }){
   });
   mountEl.appendChild(fab);
 }
+
+// Listen for Next Door events
+window.addEventListener('visit:logged', (ev) => {
+  const d = ev.detail || {};
+  if (!d.lat || !d.lon) return;
+  const color = '#8fe388';
+  L.circleMarker([d.lat, d.lon], { radius:8, color, fillColor:color, fillOpacity:0.9 })
+    .addTo(window._leafletMapInstance);
+});
+
 function daysSince(iso){ const t = Date.parse(iso||''); if(!t) return 9999; return Math.floor((Date.now()-t)/86400000); }
 function norm(a){ return String(a||'').trim().toLowerCase(); }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
