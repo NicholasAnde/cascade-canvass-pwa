@@ -26,11 +26,11 @@ function toast(msg){
 }
 window.toast = toast;
 
-window.addEventListener('hashchange', route);
 window.addEventListener('load', async () => {
   if ('serviceWorker' in navigator) {
-    try { await navigator.serviceWorker.register('/src/sw.js'); } catch(e){}
+    try { await navigator.serviceWorker.register('src/sw.js'); } catch(e){}
   }
   try{ await drainQueue(()=>Promise.resolve()); }catch{}
   route();
 });
+
