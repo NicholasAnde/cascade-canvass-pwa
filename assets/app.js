@@ -8,7 +8,7 @@ window.S = window.S || {
   leadsLog: JSON.parse(localStorage.getItem('leadsLog') || '[]'),
   queue: JSON.parse(localStorage.getItem('queue') || '[]'),
   geoList: [], geoPtr: 0, geoRadius: 150, geoLimit: 25, cooldownDays: 90
-};
+, enableNextDoorLookup: (localStorage.getItem('enableNextDoorLookup')||'true')==='true'};
 document.documentElement.dataset.theme = (S.theme === 'light') ? 'light' : '';
 
 // Load config
@@ -19,6 +19,8 @@ document.documentElement.dataset.theme = (S.theme === 'light') ? 'light' : '';
     S.secret        = cfg.sharedSecret || '';
     S.emailNotifyTo = cfg.emailNotifyTo || '';
     S.cooldownDays  = cfg.cooldownDays || S.cooldownDays;
+    S.enableNextDoorLookup = (typeof cfg.enableNextDoorLookup==='boolean'? cfg.enableNextDoorLookup : true);
+    try{ localStorage.setItem('enableNextDoorLookup', String(S.enableNextDoorLookup)); }catch(e){}
   }catch(e){}
   window.addEventListener('online', retryQueue);
 })();
@@ -294,6 +296,180 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 // Boot
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
 
+
 /*NEXT_DOOR_FEATURE*/
+(() => {
+  // Guard & settings
+  const LS = {
+    get(key, def){ try{ const v = localStorage.getItem(key); return v==null? def : (v==='true'? true : (v==='false'? false : v)); }catch(_){ return def; } },
+    set(key, val){ try{ localStorage.setItem(key, String(val)); }catch(_){} }
+  };
+  if (typeof window.S === 'undefined') window.S = {};
+  if (typeof S.enableNextDoorLookup === 'undefined') S.enableNextDoorLookup = LS.get('enableNextDoorLookup', true);
+
+  // Small helpers
+  function $(sel,root=document){ return root.querySelector(sel); }
+  function $all(sel,root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function toast(msg){ try{ if(window.showToast) return showToast(msg,'info'); }catch(_){} alert(msg); }
+  function bestAddressFrom(data){
+    const addr = (data && data.address) || {};
+    const parts = [];
+    const hn = addr.house_number || "";
+    const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
+    const line1 = [hn, road].filter(Boolean).join(" ").trim();
+    if(line1) parts.push(line1);
+    const city = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || "";
+    const state = addr.state || "";
+    const pc = addr.postcode || "";
+    const cityStateZip = [city, [state, pc].filter(Boolean).join(" ")].filter(Boolean).join(", ").trim();
+    if(cityStateZip) parts.push(cityStateZip);
+    return parts.join(", ");
+  }
+
+  // Inject button next to likely address inputs (id contains address/addr/street)
+  function findAddressInputs(){
+    const candidates = $all('input[id*=\"address\" i], input[id*=\"addr\" i], input[id*=\"street\" i]');
+    // De-dup by element
+    return candidates.filter((el, i, a) => a.indexOf(el)===i);
+  }
+
+  function ensureButtonFor(input){
+    if (!input) return;
+    if (input.dataset.nextDoorBound === '1') return;
+    input.dataset.nextDoorBound = '1';
+    // Make a small button element
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn next-door-btn';
+    btn.title = 'Use your current location once to fill the address';
+    btn.textContent = 'Next Door';
+    btn.style.marginLeft = '8px';
+    // Fallback link area
+    const fx = document.createElement('span');
+    fx.className = 'next-door-fallback';
+    fx.style.marginLeft = '8px';
+
+    // Insert after input
+    input.insertAdjacentElement('afterend', fx);
+    input.insertAdjacentElement('afterend', btn);
+
+    btn.addEventListener('click', async () => {
+      if (!S.enableNextDoorLookup) { toast('Next Door is disabled in Settings.'); return; }
+      if (!('geolocation' in navigator)) { toast('Geolocation not available on this device.'); return; }
+      // One-time geolocation
+      const pos = await new Promise((resolve, reject) => {
+        let done = false;
+        const id = navigator.geolocation.getCurrentPosition(
+          p => { if(done) return; done=true; resolve(p); },
+          e => { if(done) return; done=true; reject(e); },
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+        );
+        setTimeout(()=>{ if(!done){ done=true; reject(new Error('timeout')); } }, 6000);
+      }).catch(err => { toast('Couldn\\'t get your location.'); return null; });
+      if (!pos) return;
+
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+
+      // Reverse geocode via Nominatim (text-only extraction)
+      let data = null;
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&addressdetails=1&email=${encodeURIComponent('nicholasande@gmail.com')}`;
+        const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        data = await r.json();
+      } catch(e){
+        toast('Lookup failed — try again or type your address.');
+        return;
+      }
+      if(!data) return;
+      const parsed = bestAddressFrom(data);
+      const fullText = data.display_name || '';
+
+      if (parsed){
+        input.value = parsed;
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+        toast('Address filled. Review and edit if needed.');
+      } else if (fullText){
+        input.value = fullText;
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+        toast('Used full address text. Review and edit if needed.');
+      } else {
+        toast('No address found — please type it.');
+      }
+
+      // Offer a fallback: if parsed and fullText differ, provide a quick insert link
+      fx.innerHTML = '';
+      if (fullText && parsed && fullText !== parsed){
+        const a = document.createElement('button');
+        a.type = 'button';
+        a.className = 'linklike';
+        a.textContent = 'Use full text instead';
+        a.addEventListener('click', () => {
+          input.value = fullText;
+          input.dispatchEvent(new Event('input', {bubbles:true}));
+          toast('Used full address text.');
+          fx.innerHTML='';
+        });
+        fx.appendChild(a);
+      }
+    });
+  }
+
+  function scanAndAttach(){
+    findAddressInputs().forEach(ensureButtonFor);
+  }
+
+  // Re-scan on renders
+  document.addEventListener('DOMContentLoaded', scanAndAttach);
+  window.addEventListener('hashchange', () => setTimeout(scanAndAttach, 0));
+  window.addEventListener('popstate', () => setTimeout(scanAndAttach, 0));
+  // In case app re-renders main view without navigation:
+  setInterval(scanAndAttach, 1000);
+
+  // Minimal styles (inline) — safe, tiny.
+  const style = document.createElement('style');
+  style.textContent = `.next-door-btn{font-size:.875rem; padding:.35rem .6rem; border-radius:.5rem; border:1px solid var(--fg-2, #aaa); background:transparent; cursor:pointer}
+  .next-door-btn:hover{opacity:.9}
+  .next-door-fallback .linklike{font-size:.825rem; text-decoration:underline; background:none; border:none; cursor:pointer; padding:0; margin:0;}`;
+  document.head.appendChild(style);
+})();
+
+
 
 /*NEXT_DOOR_SETTINGS*/
+(() => {
+  function injectToggle(){
+    const view = document.getElementById('view');
+    if(!view) return;
+    if(view.dataset.nextDoorSettings==='1') return;
+    // Look for Settings heading
+    const h2 = view.querySelector('h2');
+    if(!h2 || !/Settings/i.test(h2.textContent||'')) return;
+    // Create field
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    wrap.innerHTML = `<label>Enable Next Door lookup</label>
+      <select id="s_nextdoor">
+        <option value="true"${S.enableNextDoorLookup?' selected':''}>On</option>
+        <option value="false"${!S.enableNextDoorLookup?' selected':''}>Off</option>
+      </select>`;
+    h2.insertAdjacentElement('afterend', wrap);
+    view.dataset.nextDoorSettings='1';
+    // Hook into existing save button if present
+    const saveBtn = view.querySelector('button.primary');
+    if (saveBtn){
+      const orig = saveBtn.onclick;
+      saveBtn.onclick = function(ev){
+        const val = (document.getElementById('s_nextdoor')||{}).value;
+        if (val!=null){
+          S.enableNextDoorLookup = String(val)==='true';
+          try{ localStorage.setItem('enableNextDoorLookup', String(S.enableNextDoorLookup)); }catch(e){}
+        }
+        if (orig) return orig.call(this, ev);
+      };
+    }
+  }
+  document.addEventListener('DOMContentLoaded', injectToggle);
+  setInterval(injectToggle, 1000);
+})();
+
