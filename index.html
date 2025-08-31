@@ -13,11 +13,18 @@
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 
-  <!-- Leaflet styles -->
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
   <!-- App styles -->
   <link rel="stylesheet" href="assets/style.css"/>
+  <style>
+    /* Ensure the map always has space even if external CSS changes */
+    #map { width: 100%; height: calc(100vh - 120px); border-radius: 10px; background: #0b0e14; }
+    body { background: #0f1115; color: #d6deeb; }
+    .card { background:#151922; padding:12px; border-radius:10px; margin:12px; }
+    .topbar, .foot { background:#0f1115; }
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -29,19 +36,20 @@
   <aside id="drawer" class="drawer" aria-hidden="true">
     <header>Menu</header>
     <nav class="nav">
-      <a href="#" onclick="nav('dashboard')">Home</a>
-      <a href="#" onclick="nav('knock')">Next Door</a>
-      <a href="#" onclick="nav('lead')">New Lead</a>
-      <a href="#" onclick="nav('tracker')">Lead Tracker</a>
-      <a href="#" onclick="nav('maptoday')">Map</a>
-      <a href="#" onclick="nav('scripts')">Scripts</a>
-      <a href="#" onclick="nav('settings')">Settings</a>
+      <a href="#" onclick="toggleDrawer()">Home</a>
+      <a href="#" onclick="toggleDrawer()">Next Door</a>
+      <a href="#" onclick="toggleDrawer()">New Lead</a>
+      <a href="#" onclick="toggleDrawer()">Lead Tracker</a>
+      <a href="#" onclick="toggleDrawer()">Map</a>
+      <a href="#" onclick="toggleDrawer()">Scripts</a>
+      <a href="#" onclick="toggleDrawer()">Settings</a>
     </nav>
   </aside>
 
   <main id="view">
-    <!-- Optional: explicit map host so we don't rely on JS injection -->
-    <div id="map" style="width:100%;height:calc(100vh - 120px);border-radius:10px;background:#0b0e14"></div>
+    <!-- Visible map host; app.js will initialize Leaflet here -->
+    <section class="card"><h2>Map</h2></section>
+    <div id="map"></div>
   </main>
 
   <footer class="foot"><small>Mobile PWA</small></footer>
@@ -55,27 +63,35 @@
       d.classList.toggle('open');
       d.setAttribute('aria-hidden', !d.classList.contains('open'));
     }
-    function nav(tab){ toggleDrawer(); if(window.go) go(tab); }
+
+    // Dev-only: unregister any old SW so changes take effect
     if ('serviceWorker' in navigator) {
-      // Dev-mode unregister; remove or guard behind env flag for production
-      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(function(){});
+      navigator.serviceWorker.getRegistrations()
+        .then(rs => rs.forEach(r=>r.unregister()))
+        .catch(function(){});
     }
+
+    // Simple error banner
     window.addEventListener('error', function(e){
       const box=document.getElementById('err');
       box.style.display='block';
       box.textContent = 'JS Error: ' + (e.message || e.error || e);
     });
+
+    // No router & no go(); app.js handles its own init on DOMContentLoaded
     document.addEventListener('DOMContentLoaded', function(){
-      if (window.go) { go('dashboard'); }
-      else { document.getElementById('view').insertAdjacentHTML('afterbegin','<section class="card"><h2>Loading…</h2></section>'); }
+      const v = document.getElementById('view');
+      // Keep a subtle “Loading…” card until app.js status updates
+      v.insertAdjacentHTML('afterbegin','<section class="card" id="loading-card"><h2>Loading…</h2></section>');
+      // app.js will update #status and can remove this card if you want
+      setTimeout(function(){ const lc=document.getElementById('loading-card'); lc && lc.remove(); }, 2000);
     });
   </script>
 
-  <!-- Scripts (defer so DOM is ready before they execute) -->
+  <!-- Scripts (defer preserves order and waits for HTML parse) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
   <script src="assets/app.js" defer></script>
 
   <div id="next-door-global"><!--NEXT_DOOR_GLOBAL--></div>
 </body>
 </html>
-
