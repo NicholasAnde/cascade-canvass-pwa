@@ -21,6 +21,17 @@
     .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
   </style>
 
+
+  <style>
+    .addr-row{display:grid;grid-template-columns:1fr;gap:.5rem;align-items:center}
+    .iconbtn.locate{border:1px solid #2a2a2a;background:#0b0b0b;padding:.7rem .9rem;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;transition:transform .08s ease}
+    .iconbtn.locate:active{transform:scale(0.98)}
+    .iconbtn.locate[disabled]{opacity:.6;cursor:not-allowed}
+    .iconbtn.locate svg{margin-right:.5rem;vertical-align:middle}
+    #nd-locate-status{display:block;margin-top:.25rem;min-height:1.25rem}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  </style>
+
 </head>
 <body>
   <header class="topbar">
@@ -28,24 +39,7 @@
     <h1>Cascade Canvass</h1>
     <button class="iconbtn" onclick="if(window.refreshGeoList) refreshGeoList()" aria-label="Reload nearby">⟳</button>
   </header>
-
-  <!-- Next Door Address + Locate (progressive enhancement) -->
-  <section id="nextdoor-locate" class="card" style="margin:1rem">
-    <div class="addr-row">
-      <label for="nd-address" class="sr-only">Address</label>
-      <input id="nd-address" name="nd-address" type="text" placeholder="Enter address" autocomplete="street-address" />
-      <button id="nd-locate" class="iconbtn locate" type="button" aria-label="Match address to my location" title="Match Address">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="margin-right:.5rem;vertical-align:middle">
-          <path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z"></path>
-        </svg>
-        <span>Match Address</span>
-      </button>
-    </div>
-    <small id="nd-locate-status" class="muted" role="status" aria-live="polite"></small>
-  </section>
-
-
-  <aside id="drawer" class="drawer" aria-hidden="true">
+<aside id="drawer" class="drawer" aria-hidden="true">
     <header>Menu</header>
     <nav class="nav">
       <a href="#" onclick="nav('dashboard')">Home</a>
@@ -65,115 +59,81 @@
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
 
+  
   <script>
-    function toggleDrawer(){
-      const d=document.getElementById('drawer');
-      d.classList.toggle('open'); d.setAttribute('aria-hidden', !d.classList.contains('open'));
-    }
-    function nav(tab){ toggleDrawer(); if(window.go) go(tab); }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(()=>{});
-    }
-    window.addEventListener('error', e=>{
-      const box=document.getElementById('err');
-      box.style.display='block';
-      box.textContent = 'JS Error: ' + (e.message || e.error || e);
-    });
-    document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
-  </script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="assets/app.js"></script>
-
-  <script>
-  (function attachNextDoorGeolocate(){
+  (function nextDoorMatchAddressOnly(){
     function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
     ready(()=>{
-      let input = document.getElementById('nd-address');
-      let btn   = document.getElementById('nd-locate');
-      let note  = document.getElementById('nd-locate-status');
-
-      // If the app already has an address input elsewhere, hook it:
-      if(!input){
-        const guess = Array.from(document.querySelectorAll('input[type="text"],input[type="search"]')).find(el=>{
-          const idn = (el.id || '').toLowerCase();
-          const nm  = (el.name || '').toLowerCase();
-          const ph  = (el.placeholder || '').toLowerCase();
-          return idn.includes('address') || nm.includes('address') || ph.includes('address');
-        });
-        if(guess){
-          input = guess;
-          // If our button isn't in DOM, create and insert after the guessed input
-          if(!btn){
-            btn = document.createElement('button');
-            btn.id='nd-locate'; btn.type='button'; btn.className='iconbtn locate';
-            btn.setAttribute('aria-label','Use my location'); btn.title='Use my location';
-            btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="margin-right:.5rem;vertical-align:middle"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z"></path></svg><span>Match Address</span>';
-            // Wrap in a grid row for layout nicety
-            const wrap = document.createElement('div'); wrap.className='addr-row';
-            input.parentNode.insertBefore(wrap, input);
-            wrap.appendChild(input);
-            wrap.appendChild(btn);
-            note = document.createElement('small'); note.id='nd-locate-status'; note.className='muted'; note.setAttribute('role','status'); note.setAttribute('aria-live','polite');
-            wrap.parentNode.insertBefore(note, wrap.nextSibling);
-          }
+      // Helper: find the "Next Door" card by header text
+      const h2s = Array.from(document.querySelectorAll('h2,h3'));
+      let card = null;
+      for(const h of h2s){
+        if((h.textContent||'').trim().toLowerCase()==='next door'){
+          // assume card container is parent or grandparent with inputs
+          let n=h;
+          for(let i=0;i<3;i++){ if(n && n.querySelector && n.querySelector('input')){ card=n; break; } n=n.parentElement; }
+          if(!card){ card = h.closest('.card') || h.parentElement; }
+          break;
         }
       }
+      if(!card) return;
 
-      if(!btn || !input){ return; }
+      // Locate the address input inside this card
+      let addressInput = Array.from(card.querySelectorAll('input')).find(el=>{
+        const idn=(el.id||'').toLowerCase(), nm=(el.name||'').toLowerCase(), ph=(el.placeholder||'').toLowerCase();
+        const lbl=(el.getAttribute('aria-label')||'').toLowerCase();
+        return idn.includes('address')||nm.includes('address')||ph.includes('address')||lbl.includes('address');
+      });
+      if(!addressInput) return;
 
-      const provider = {
-        reverseGeocode: async ({lat, lon}) => {
-          const url = new URL('https://nominatim.openstreetmap.org/reverse');
-          url.searchParams.set('format','jsonv2');
-          url.searchParams.set('lat', String(lat));
-          url.searchParams.set('lon', String(lon));
-          url.searchParams.set('addressdetails','1');
-          url.searchParams.set('zoom','18');
-          const resp = await fetch(url.toString(), { headers: { 'Accept':'application/json' } });
-          if(!resp.ok) throw new Error('Reverse geocode failed: '+resp.status);
-          const data = await resp.json();
-          return data.display_name || '';
-        }
-      };
+      // Build the button row (below the address input)
+      const wrap = document.createElement('div');
+      wrap.className='addr-row';
+      const btn = document.createElement('button');
+      btn.id='nd-locate'; btn.type='button'; btn.className='iconbtn locate';
+      btn.setAttribute('aria-label','Match Address'); btn.title='Match Address';
+      btn.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z"></path></svg><span>Match Address</span>';
+      const note = document.createElement('small'); note.id='nd-locate-status'; note.className='muted'; note.setAttribute('role','status'); note.setAttribute('aria-live','polite');
+      wrap.appendChild(btn);
+      addressInput.insertAdjacentElement('afterend', wrap);
+      wrap.insertAdjacentElement('afterend', note);
 
-      function setStatus(msg){ if(note) note.textContent = msg || ''; }
+      // Remove Top-bar "Match Address" (if any) by text match
+      Array.from(document.querySelectorAll('button')).forEach(b=>{
+        const t=(b.textContent||'').trim().toLowerCase();
+        if(t==='match address' && !wrap.contains(b)){ b.remove(); }
+      });
+
+      // Remove "Next Closet" and "No Answer" buttons
+      Array.from(document.querySelectorAll('button')).forEach(b=>{
+        const t=(b.textContent||'').trim().toLowerCase();
+        if(t==='no answer' || t==='next closet' || t==='next closest'){ b.remove(); }
+      });
+
+      // Fill with lat,lon only (no geocoding)
+      function setStatus(msg){ note.textContent = msg||''; }
       function setBusy(b){ btn.disabled = !!b; btn.setAttribute('aria-busy', b ? 'true' : 'false'); }
 
-      async function doLocate(){
-        if(!('geolocation' in navigator)){
-          setStatus('Location not supported on this device.'); return;
-        }
-        setBusy(true); setStatus('Locating…');
-        navigator.geolocation.getCurrentPosition(async pos=>{
-          try{
-            const { latitude: lat, longitude: lon, accuracy } = pos.coords;
-            setStatus('Found position (±'+Math.round(accuracy)+'m). Resolving address…');
-            const address = await provider.reverseGeocode({lat, lon});
-            if(address){
-              input.value = address;
-              input.dispatchEvent(new Event('input', {bubbles:true}));
-              input.dispatchEvent(new Event('change', {bubbles:true}));
-              setStatus('Address filled from your location.');
-            }else{
-              setStatus('Could not resolve address.');
-            }
-          }catch(e){
-            console.error(e);
-            setStatus('Could not resolve address.');
-          }finally{
-            setBusy(false);
-          }
+      btn.addEventListener('click', ()=>{
+        if(!('geolocation' in navigator)){ setStatus('Location not supported.'); return; }
+        setBusy(true); setStatus('Getting location…');
+        navigator.geolocation.getCurrentPosition(pos=>{
+          const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+          addressInput.value = lat.toFixed(6) + ', ' + lon.toFixed(6);
+          addressInput.dispatchEvent(new Event('input', {bubbles:true}));
+          addressInput.dispatchEvent(new Event('change', {bubbles:true}));
+          setStatus('Coordinates filled (±'+Math.round(accuracy)+'m).');
+          setBusy(false);
         }, err=>{
-          const map={1:'Permission denied.',2:'Location unavailable.',3:'Location timed out.'};
+          const map={1:'Permission denied.',2:'Location unavailable.',3:'Timed out.'};
           setStatus(map[err.code] || 'Location error.');
           setBusy(false);
         }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
-      }
-
-      btn.addEventListener('click', doLocate);
+      });
     });
   })();
   </script>
+
 
 </body>
 </html>
