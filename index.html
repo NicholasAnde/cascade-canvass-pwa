@@ -9,7 +9,7 @@
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="assets/style.css"/>
+  <link rel="stylesheet" href="assets/style.css?v=480"/>
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +22,7 @@
     <header>Menu</header>
     <nav class="nav">
       <a href="#" onclick="nav('dashboard')">Home</a>
+      <a href="#" onclick="nav('knock')">Next Door</a>
       <a href="#" onclick="nav('lead')">New Lead</a>
       <a href="#" onclick="nav('tracker')">Lead Tracker</a>
       <a href="#" onclick="nav('maptoday')">Map</a>
@@ -31,8 +32,11 @@
   </aside>
 
   <main id="view"></main>
+    <div id="toasts" aria-live="polite" class="toasts"></div>
+    <button id="queueChip" class="queue-chip" hidden>0</button>
 
-  <footer class="foot"><small>Mobile PWA</small></footer>
+
+  <footer class="foot"><small id="versionStamp">Mobile PWA • v4.8</small></footer>
 
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
@@ -54,6 +58,6 @@
     document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
   </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="assets/app.js"></script>
+  <script src="assets/app.js?v=480"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// v4.7.2 — full app: geocoder RemovedNextDoor + cooldown, Map Today/7d, lead photos (gallery/camera) + preview + scaling, CORS-safe posts, stacked buttons, pine icon, Test POST, queue, light/dark.
+// v4.7.2 — full app: geocoder Next Door + cooldown, Map Today/7d, lead photos (gallery/camera) + preview + scaling, CORS-safe posts, stacked buttons, pine icon, Test POST, queue, light/dark.
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -49,6 +49,7 @@ function statsBarHTML(){ const c=counts(); return `<div class="statsbar">
 // -------- router --------
 function go(tab){
   if(tab==='dashboard') return renderDashboard();
+  if(tab==='knock') return renderKnock_geo();
   if(tab==='lead') return renderLead();
   if(tab==='tracker') return renderTracker();
   if(tab==='maptoday') return renderMapToday();
@@ -101,7 +102,8 @@ function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.g
 function renderDashboard(){
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
     <div class="btn-row">
-<button onclick="go('lead')">New Lead</button>
+      <button class="primary" onclick="go('knock')">Next Door</button>
+      <button onclick="go('lead')">New Lead</button>
       <button onclick="go('tracker')">Lead Tracker</button>
       <button onclick="go('maptoday')">Map</button>
       <button onclick="go('scripts')">Scripts</button>
@@ -110,15 +112,70 @@ function renderDashboard(){
   </section>`;
 }
 
-// removed RemovedNextDoor feature
-
+async function renderKnock_geo(){
+  if(!S.geoList.length){ const ok=await refreshGeoList(); if(!ok){
+    el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
+      <div class="field"><label>Address*</label><input id="k_addr" placeholder="1208 Maple St" autocomplete="street-address"></div>
+      <div class="field"><label>Notes</label><input id="k_notes" placeholder="Optional" enterkeyhint="done"></div>
+      <div class="btn-row">
+        <button class="primary" onclick="confirmVisit('Lead')">Lead</button>
+        <button onclick="confirmVisit('No Answer')">No Answer</button>
+        <button onclick="confirmVisit('Left Literature')">Left Literature</button>
+        <button onclick="confirmVisit('Declined')">Declined</button>
+        <button onclick="confirmEnd()">End / Skip</button>
+      </div>
+    </section>`; return; } }
+  if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr=n; }
+  const cur=S.geoList[S.geoPtr]||{};
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
+    <div class="field"><label>Address*</label><input id="k_addr" autocomplete="street-address" value="${(cur.addr||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Notes</label><input id="k_notes" enterkeyhint="done" placeholder="Optional"></div>
+    <div class="btn-row">
+      <button class="primary" ${cur.eligible?'':'disabled'} onclick="confirmVisit('Lead')">Lead</button>
+      <button ${cur.eligible?'':'disabled'} onclick="confirmVisit('No Answer')">No Answer</button>
+      <button ${cur.eligible?'':'disabled'} onclick="confirmVisit('Left Literature')">Left Literature</button>
+      <button onclick="confirmVisit('Declined')">Declined</button>
+      <button onclick="confirmEnd()">End / Skip</button>
+      <button onclick="advanceGeo()">Next Closest →</button>
+      <button onclick="refreshGeoList()">Reload Nearby</button>
+    </div>
+  </section>`;
+}
 function confirmEnd(){ if(confirm('End this door and go to next?')) advanceGeo(); }
 function confirmVisit(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   if(!confirm(`Log "${outcome}" at:\\n${addr}?`)) return; postVisit_geo(outcome);
 }
-// removed RemovedNextDoor feature
+function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.geoPtr+1); S.geoPtr=(n>=0)?n:Math.min(S.geoPtr+1,S.geoList.length-1); renderKnock_geo(); }
+async function postVisit_geo(outcome){
+  const addr=(el('#k_addr')?.value||'').trim(); const notes=(el('#k_notes')?.value||'').trim();
+  if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
+  let objection=''; if(outcome==='Declined') objection=prompt('Reason for decline? (optional)','')||'';
+  const cur=S.geoList[S.geoPtr]||{};
+  const item={ type: outcome==='Lead'?'lead':'visit', date:todayISO(), time:new Date().toISOString(),
+    address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection,
+    lat:(typeof cur.lat==='number')?cur.lat:null, lon:(typeof cur.lon==='number')?cur.lon:null };
+  try{ await sendToScript({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
+  catch(e){ S.queue.push({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
+  S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
+}
 
+// Lead + photos
+function renderLead(){
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>New Lead</h2>
+    <div class="field"><label>Name*</label><input id="l_name" autocomplete="name"></div>
+    <div class="field"><label>Phone*</label><input id="l_phone" inputmode="tel" autocomplete="tel" placeholder="(###) ###-####"></div>
+    <div class="field"><label>Email</label><input id="l_email" inputmode="email" autocomplete="email"></div>
+    <div class="field"><label>Address</label><input id="l_addr" autocomplete="street-address" value="${S.geoList[S.geoPtr]?.addr||''}"></div>
+    <div class="field"><label>Service</label><select id="l_service"><option>Removal</option><option>Trim</option><option>Storm Prep</option><option>Planting</option><option>Other</option></select></div>
+    <div class="field"><label>Urgency</label><select id="l_urgency"><option>High</option><option>Medium</option><option>Low</option></select></div>
+    <div class="field"><label>Budget</label><select id="l_budget"><option>&lt;$500</option><option>$500+</option><option>$1k+</option></select></div>
+    <div class="field"><label>Notes</label><textarea id="l_notes" rows="4" enterkeyhint="done"></textarea></div>
+    <div class="field"><label>Photos (up to 3)</label><input id="l_photos" type="file" accept="image/*" multiple><div id="l_preview" class="btn-row" style="margin-top:.4rem"></div></div>
+    <div class="btn-row"><button class="primary" onclick="confirmLead()">Save Lead</button><button onclick="go('dashboard')">Cancel</button></div>
+  </section>`;
+  bindPhotoPreview();
+}
 function confirmLead(){
   const name=(el('#l_name')?.value||'').trim(); const addr=(el('#l_addr')?.value||'').trim();
   if(!name){ showToast('Name required','error'); return; }
@@ -238,3 +295,78 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 
 // Boot
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
+
+/* === v4.8 injected helpers === */
+
+// === v4.8: Toasts ===
+function toast(msg, opts){
+  opts = opts || {};
+  var el = document.getElementById('toasts');
+  if (!el) return;
+  el.innerHTML = '<span>'+msg+'</span>' + (opts.undo ? ' <span class="actions" id="toastUndo">Undo</span>' : '');
+  el.classList.add('show');
+  var undone = false;
+  function hide(){ el.classList.remove('show'); }
+  if (opts.undo) { var u = document.getElementById('toastUndo'); if (u) u.onclick = function(){ undone=true; if(opts.onUndo) opts.onUndo(); hide(); }; }
+  setTimeout(function(){ if(!undone) hide(); }, opts.ms || 2500);
+}
+function setQueueCount(n){
+  var chip = document.getElementById('queueChip'); if (!chip) return;
+  chip.textContent = String(n||0); chip.hidden = !(n>0);
+}
+
+
+// === v4.8: Cooldown rings ===
+var DAY = 86400000; var thresholds = { recent: 7*DAY, cooling: 21*DAY };
+function applyCooldownClass(marker, lastDate){
+  try{
+    var age = Date.now() - new Date(lastDate).getTime();
+    var el = marker && (marker._icon || (marker.getElement && marker.getElement()));
+    if (!el) return;
+    el.classList.remove('marker-recent','marker-cooling','marker-eligible');
+    if (age < thresholds.recent) el.classList.add('marker-recent');
+    else if (age < thresholds.cooling) el.classList.add('marker-cooling');
+    else el.classList.add('marker-eligible');
+  }catch(e){}
+}
+
+
+// === v4.8: Map popup one-tap submit ===
+var __lastQueuedId = null;
+async function onPopupAction(action, marker){
+  var coords = (marker && marker.getLatLng) ? marker.getLatLng() : {lat:null,lng:null};
+  var quickNote = (document.querySelector('#quickNote')||{}).value || '';
+  var payload = { type:'visit', Outcome: action, Lat: coords.lat, Lon: coords.lng, Notes: quickNote, Timestamp: new Date().toISOString() };
+  try{
+    var res = await tryPostOrQueue(payload);
+    if (res.queued){ __lastQueuedId = res.id; toast('Queued: '+action); }
+    else { toast('Logged: '+action); }
+    applyCooldownClass(marker, new Date());
+  }catch(e){
+    var r = queueAdd(payload); __lastQueuedId = r.id; toast('Queued: '+action);
+  }
+}
+
+
+// === v4.8: Queue helpers (compatible) ===
+var __q = null;
+function qLoad(){ if(!__q){ try{ __q = JSON.parse(localStorage.getItem('postQueue')||'[]') }catch(e){ __q=[] } } return __q; }
+function qSave(){ try{ localStorage.setItem('postQueue', JSON.stringify(__q||[])); }catch(e){} setQueueCount((__q||[]).length); }
+function queueAdd(item){
+  var id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())+Math.random().toString(16).slice(2);
+  var q = qLoad(); q.push({id:id, item:item}); qSave(); return {id:id};
+}
+async function tryPostOrQueue(item){
+  try{
+    var res = await fetch(APPS_SCRIPT_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(item)});
+    localStorage.setItem('lastHttp', String(res.status));
+    localStorage.setItem('lastPostAt', new Date().toISOString());
+    if(!res.ok) throw new Error(res.status);
+    return {queued:false, id:null};
+  }catch(e){
+    var r = queueAdd(item);
+    return {queued:true, id:r.id};
+  }
+}
+setQueueCount((qLoad()||[]).length);
+

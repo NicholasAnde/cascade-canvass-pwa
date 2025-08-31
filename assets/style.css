@@ -46,3 +46,15 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pills{display:flex;gap:.5rem}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* === v4.8 additions: rings + toasts + queue chip === */
+.marker-eligible { outline: 3px solid #2ecc71; outline-offset: 2px; }
+.marker-cooling  { outline: 3px solid #f1c40f; outline-offset: 2px; }
+.marker-recent   { outline: 3px solid #e74c3c; outline-offset: 2px; }
+.toasts{ position:fixed; left:50%; bottom:16px; transform:translateX(-50%);
+  max-width:90vw; padding:.75rem 1rem; border-radius:.75rem; background:#1b1f24;
+  box-shadow:0 6px 24px rgba(0,0,0,.25); font-size:.95rem; display:none; z-index:9999 }
+.toasts.show{ display:block; }
+.toasts .actions{ margin-left:.75rem; text-decoration:underline; cursor:pointer; }
+.queue-chip{ position:fixed; right:12px; bottom:16px; padding:.4rem .6rem;
+  border-radius:999px; background:#1b1f24; border:1px solid #333; font-size:.85rem; z-index:9999 }
