@@ -1,5 +1,5 @@
 {
-  "sheetsEndpoint": "https://script.google.com/macros/s/AKfycbwxuM7h1NH1mC8BGUWv7g6Hy5zr2UyZLDf258smSJqayQMYtJUlq0lo0v3ZD_DwJ4I_iA/exec",
+  "sheetsEndpoint": "https://script.google.com/macros/s/AKfycbzc-fqJY56wWvFcqOnJs9Q-P5sLtm6420KX-YiZRqWOaREUjyg0jyUDLxKdlJSSTfLn4Q/exec",
   "cooldownDays": 90,
   "sharedSecret": "Cascade",
   "emailNotifyTo": "nicholasande@gmail.com"
