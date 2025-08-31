@@ -57,7 +57,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/app.js"></script>
 
-  <footer id="app-version" style="text-align:center;padding:8px;opacity:.7;">Mobile PWA • v4.9.5</footer>
+  <footer id="app-version" style="text-align:center;padding:8px;opacity:.7;">Mobile PWA • v4.9.6.6</footer>
 
 <script>
 // v4.9: SW registration
@@ -70,5 +70,13 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
+
+<section id="settings" data-route="settings" class="page">
+  <div class="card">
+    <h3>Maintenance</h3>
+    <button id="resetCachesBtn" class="btn danger">Reset Caches (SW + Storage)</button>
+    <p class="muted">Clears service worker, caches, local storage; then reloads the app.</p>
+  </div>
+</section>
 </body>
 </html>

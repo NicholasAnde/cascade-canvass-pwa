@@ -1,4 +1,3 @@
-// v4.7.2 — full app: geocoder Next Door + cooldown, Map Today/7d, lead photos (gallery/camera) + preview + scaling, CORS-safe posts, stacked buttons, pine icon, Test POST, queue, light/dark.
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -559,4 +558,47 @@ window.addEventListener('load', ()=>{
     try{ if (typeof nav==='function'){ nav('map'); } }catch(e){}
     setTimeout(drawMarkers, 800);
   });
+})();
+
+
+/* v4.9.6: minimal ES5 init (no IDB, no badges) */
+(function(){
+  // On load, force map route once (safe if nav exists)
+  window.addEventListener('load', function(){
+    try{ if (typeof nav==='function'){ nav('map'); } }catch(e){}
+  });
+})();
+
+
+/* v4.9.6: Reset Caches button wiring (ES5) */
+(function(){
+  function clearAll(){
+    try{
+      // unregister SW
+      if ('serviceWorker' in navigator){
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          for (var i=0;i<regs.length;i++){ regs[i].unregister(); }
+        });
+      }
+      // clear caches
+      if (window.caches && caches.keys){
+        caches.keys().then(function(keys){
+          for (var i=0;i<keys.length;i++){ caches.delete(keys[i]); }
+        });
+      }
+    }catch(e){}
+    try{ localStorage.clear(); sessionStorage.clear(); }catch(e){}
+    setTimeout(function(){ location.reload(true); }, 400);
+  }
+  function hook(){
+    var b = document.getElementById('resetCachesBtn');
+    if (b){
+      b.addEventListener('click', function(){
+        if (confirm('Reset service worker, caches, and storage?')){ clearAll(); }
+      });
+    }
+  }
+  if (document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', hook);
+  } else { hook(); }
 })();

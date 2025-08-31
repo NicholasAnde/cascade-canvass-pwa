@@ -52,3 +52,6 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 
 /* v4.9.2: Map status badge */
 .status-badge{position:fixed;right:10px;bottom:58px;z-index:9999;padding:6px 10px;border-radius:8px;background:#2228;backdrop-filter:blur(6px);font-size:12px;line-height:1.2}
+
+.btn.danger{background:#a11;color:#fff;border:none;padding:10px 14px;border-radius:8px}
+.muted{opacity:.7;font-size:12px}
