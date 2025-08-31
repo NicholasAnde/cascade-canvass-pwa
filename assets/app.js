@@ -62,3 +62,52 @@ async function retryQueue(){ if(!S.queue.length){ showToast('Queue empty','info'
 function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','info'); return; } if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return; S.queue=[]; saveLS(); showToast('Queue cleared ✓','success'); }
 
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
+
+/* === NextDoor geolocate patch === */
+(function attachNextDoorGeolocate(){
+  function ready(fn){
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+  ready(() => {
+    const btn   = document.getElementById('nd-locate');
+    const input = document.getElementById('nd-address');
+    const note  = document.getElementById('nd-locate-status');
+    if (!btn || !input) return;
+    const provider = {
+      reverseGeocode: async ({lat, lon}) => {
+        const url = new URL('https://nominatim.openstreetmap.org/reverse');
+        url.searchParams.set('format','jsonv2');
+        url.searchParams.set('lat', String(lat));
+        url.searchParams.set('lon', String(lon));
+        url.searchParams.set('addressdetails', '1');
+        url.searchParams.set('zoom', '18');
+        const resp = await fetch(url.toString(), { headers: { 'Accept': 'application/json' }});
+        if (!resp.ok) throw new Error('Reverse geocode failed: ' + resp.status);
+        const data = await resp.json();
+        return data.display_name || '';
+      }
+    };
+    function setStatus(msg){ if (note) note.textContent = msg || ''; }
+    function setBusy(b){ btn.disabled = !!b; btn.setAttribute('aria-busy', b ? 'true' : 'false'); }
+    async function doLocate(){
+      if (!('geolocation' in navigator)) { setStatus('Location not supported.'); return; }
+      setBusy(true); setStatus('Locating…');
+      navigator.geolocation.getCurrentPosition(async pos => {
+        try {
+          const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+          setStatus(`Found position (±${Math.round(accuracy)}m). Resolving…`);
+          const address = await provider.reverseGeocode({lat, lon});
+          if (address) {
+            input.value = address;
+            input.dispatchEvent(new Event('input', { bubbles:true }));
+            input.dispatchEvent(new Event('change', { bubbles:true }));
+            setStatus('Address filled.');
+          } else { setStatus('Could not resolve address.'); }
+        } catch (e) { console.error(e); setStatus('Could not resolve address.'); }
+        finally { setBusy(false); }
+      }, err => { setStatus('Location error.'); setBusy(false); }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+    }
+    btn.addEventListener('click', doLocate);
+  });
+})();

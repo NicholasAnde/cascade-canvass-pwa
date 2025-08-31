@@ -10,6 +10,16 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="assets/style.css"/>
+
+  <style>
+    .addr-row{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center}
+    .iconbtn.locate{border:1px solid #2a2a2a;background:#0b0b0b;padding:.55rem .6rem;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;transition:transform .08s ease}
+    .iconbtn.locate:active{transform:scale(0.98)}
+    .iconbtn.locate[disabled]{opacity:.6;cursor:not-allowed}
+    #nd-locate-status{display:block;margin-top:.25rem;min-height:1.25rem}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  </style>
+
 </head>
 <body>
   <header class="topbar">
@@ -17,6 +27,21 @@
     <h1>Cascade Canvass</h1>
     <button class="iconbtn" onclick="if(window.refreshGeoList) refreshGeoList()" aria-label="Reload nearby">⟳</button>
   </header>
+
+  <!-- Next Door Address + Locate (progressive enhancement) -->
+  <section id="nextdoor-locate" class="card" style="margin:1rem">
+    <div class="addr-row">
+      <label for="nd-address" class="sr-only">Address</label>
+      <input id="nd-address" name="nd-address" type="text" placeholder="Enter address" autocomplete="street-address" />
+      <button id="nd-locate" class="iconbtn locate" type="button" aria-label="Use my location" title="Use my location">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z"></path>
+        </svg>
+      </button>
+    </div>
+    <small id="nd-locate-status" class="muted" role="status" aria-live="polite"></small>
+  </section>
+
 
   <aside id="drawer" class="drawer" aria-hidden="true">
     <header>Menu</header>
@@ -56,5 +81,97 @@
   </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/app.js"></script>
+
+  <script>
+  (function attachNextDoorGeolocate(){
+    function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+    ready(()=>{
+      let input = document.getElementById('nd-address');
+      let btn   = document.getElementById('nd-locate');
+      let note  = document.getElementById('nd-locate-status');
+
+      // If the app already has an address input elsewhere, hook it:
+      if(!input){
+        const guess = Array.from(document.querySelectorAll('input[type="text"],input[type="search"]')).find(el=>{
+          const idn = (el.id || '').toLowerCase();
+          const nm  = (el.name || '').toLowerCase();
+          const ph  = (el.placeholder || '').toLowerCase();
+          return idn.includes('address') || nm.includes('address') || ph.includes('address');
+        });
+        if(guess){
+          input = guess;
+          // If our button isn't in DOM, create and insert after the guessed input
+          if(!btn){
+            btn = document.createElement('button');
+            btn.id='nd-locate'; btn.type='button'; btn.className='iconbtn locate';
+            btn.setAttribute('aria-label','Use my location'); btn.title='Use my location';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z"></path></svg>';
+            // Wrap in a grid row for layout nicety
+            const wrap = document.createElement('div'); wrap.className='addr-row';
+            input.parentNode.insertBefore(wrap, input);
+            wrap.appendChild(input);
+            wrap.appendChild(btn);
+            note = document.createElement('small'); note.id='nd-locate-status'; note.className='muted'; note.setAttribute('role','status'); note.setAttribute('aria-live','polite');
+            wrap.parentNode.insertBefore(note, wrap.nextSibling);
+          }
+        }
+      }
+
+      if(!btn || !input){ return; }
+
+      const provider = {
+        reverseGeocode: async ({lat, lon}) => {
+          const url = new URL('https://nominatim.openstreetmap.org/reverse');
+          url.searchParams.set('format','jsonv2');
+          url.searchParams.set('lat', String(lat));
+          url.searchParams.set('lon', String(lon));
+          url.searchParams.set('addressdetails','1');
+          url.searchParams.set('zoom','18');
+          const resp = await fetch(url.toString(), { headers: { 'Accept':'application/json' } });
+          if(!resp.ok) throw new Error('Reverse geocode failed: '+resp.status);
+          const data = await resp.json();
+          return data.display_name || '';
+        }
+      };
+
+      function setStatus(msg){ if(note) note.textContent = msg || ''; }
+      function setBusy(b){ btn.disabled = !!b; btn.setAttribute('aria-busy', b ? 'true' : 'false'); }
+
+      async function doLocate(){
+        if(!('geolocation' in navigator)){
+          setStatus('Location not supported on this device.'); return;
+        }
+        setBusy(true); setStatus('Locating…');
+        navigator.geolocation.getCurrentPosition(async pos=>{
+          try{
+            const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+            setStatus('Found position (±'+Math.round(accuracy)+'m). Resolving address…');
+            const address = await provider.reverseGeocode({lat, lon});
+            if(address){
+              input.value = address;
+              input.dispatchEvent(new Event('input', {bubbles:true}));
+              input.dispatchEvent(new Event('change', {bubbles:true}));
+              setStatus('Address filled from your location.');
+            }else{
+              setStatus('Could not resolve address.');
+            }
+          }catch(e){
+            console.error(e);
+            setStatus('Could not resolve address.');
+          }finally{
+            setBusy(false);
+          }
+        }, err=>{
+          const map={1:'Permission denied.',2:'Location unavailable.',3:'Location timed out.'};
+          setStatus(map[err.code] || 'Location error.');
+          setBusy(false);
+        }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+      }
+
+      btn.addEventListener('click', doLocate);
+    });
+  })();
+  </script>
+
 </body>
 </html>

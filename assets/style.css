@@ -46,3 +46,24 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pills{display:flex;gap:.5rem}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* === NextDoor geolocate patch === */
+.addr-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .5rem;
+  align-items: center;
+}
+.addr-row .iconbtn.locate {
+  border: 1px solid var(--line, #2a2a2a);
+  background: color-mix(in oklab, #000 85%, #fff 15%);
+  padding: .55rem .6rem;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .08s ease;
+}
+.addr-row .iconbtn.locate:active { transform: scale(0.98); }
+.addr-row .iconbtn.locate[disabled] { opacity: .6; cursor: not-allowed; }
+#nd-locate-status { display:block; margin-top:.25rem; min-height:1.25rem; }
