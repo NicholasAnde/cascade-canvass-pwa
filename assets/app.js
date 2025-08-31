@@ -65,100 +65,86 @@ function downloadCSV(name, rows){ if(!rows.length){ showToast('No data to export
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([toCSV(rows)],{type:'text/csv'})); a.download=name; a.click(); }
 
 // -------- geocoder + cooldown --------
-const KM=(a,b)=>{ const R=6371e3, toRad=x=>x*Math.PI/180; const dlat=toRad(b.lat-a.lat), dlon=toRad(b.lon-a.lon);
-  const la1=toRad(a.lat), la2=toRad(b.lat); const x=Math.sin(dlat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dlon/2)**2; return 2*R*Math.asin(Math.sqrt(x)); };
-function fmtAddr(tags){ const num=tags['addr:housenumber']||'', street=tags['addr:street']||tags['name']||'', unit=tags['addr:unit']||'', city=tags['addr:city']||tags['addr:suburb']||'';
-  return [num,street,unit?('#'+unit):'',city].filter(Boolean).join(' ').replace(/\\s+/g,' ').trim(); }
-function lastIndex(){ return (S.visitsLog||[]).reduce((m,v)=>{ const a=(v.address||'').trim(), t=v.time||v.date||'';
-  if(!a||!t) return m; if(!m[a]||new Date(t)>new Date(m[a])) m[a]=t; return m; },{}); }
-let _busy=false;
-async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
-  if(_busy) return S.geoList; _busy=true;
-  try{
-    const q=`[out:json][timeout:20];(node["addr:housenumber"]["addr:street"](around:${r},${lat},${lon});way["addr:housenumber"]["addr:street"](around:${r},${lat},${lon}););out center ${l};`;
-    const j=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({data:q})}).then(r=>r.json());
-    const uniq=new Map();
-    for(const e of (j.elements||[])){ const tags=e.tags||{}; const addr=fmtAddr(tags); if(!addr) continue;
-      const la=e.lat??e.center?.lat, lo=e.lon??e.center?.lon; if(la==null||lo==null) continue; if(!uniq.has(addr)) uniq.set(addr,{addr,lat:la,lon:lo}); }
-    const here={lat,lon}, idx=lastIndex();
-    S.geoList = Array.from(uniq.values()).map(o=>{ const dist=KM(here,{lat:o.lat,lon:o.lon}); const last=idx[o.addr]||null;
-      const d=last?daysSince(last):Infinity; const eligible=(d===Infinity)||(d>=S.cooldownDays); return {...o,dist,last,days:(d===Infinity?null:d),eligible}; })
-      .sort((a,b)=> a.eligible===b.eligible ? (a.dist-b.dist) : (a.eligible?-1:1)).slice(0,l);
-    return S.geoList;
-  } finally { _busy=false; }
-}
-async function refreshGeoList(){
-  if(!navigator.geolocation){ showToast('Geolocation not available','error'); return false; }
-  return new Promise(res=>{
-    navigator.geolocation.getCurrentPosition(async p=>{
-      try{ await fetchNearby(p.coords.latitude,p.coords.longitude); S.geoPtr=0; showToast('Nearby loaded ✓','success'); res(true); }
-      catch(e){ showToast('Geocoder error','error'); res(false); }
-    }, ()=>{ showToast('Location error','error'); res(false); });
-  });
-}
-function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.geoList[i]?.eligible) return i; } return -1; }
+// removed unused geocoder function
 
-// -------- views --------
-function renderDashboard(){
-  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
-    <div class="btn-row">
-      <button class="primary" onclick="go('knock')">Next Door</button>
-      <button onclick="go('lead')">New Lead</button>
-      <button onclick="go('tracker')">Lead Tracker</button>
-      <button onclick="go('maptoday')">Map</button>
-      <button onclick="go('scripts')">Scripts</button>
-      <button onclick="go('settings')">Settings</button>
-    </div>
-  </section>`;
-}
+// removed unused geocoder function
+
+// refreshGeoList removed (no longer used)
+
+// nextEligiblePtr removed (no longer used)
+
+
+
 
 async function renderKnock_geo(){
-  if(!S.geoList.length){ const ok=await refreshGeoList(); if(!ok){
-    el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
-      <div class="field"><label>Address*</label><input id="k_addr" placeholder="1208 Maple St" autocomplete="street-address"></div>
-      <div class="field"><label>Notes</label><input id="k_notes" placeholder="Optional" enterkeyhint="done"></div>
-      <div class="btn-row">
-        <button class="primary" onclick="confirmVisit('Lead')">Lead</button>
-        <button onclick="confirmVisit('No Answer')">No Answer</button>
-        <button onclick="confirmVisit('Left Literature')">Left Literature</button>
-        <button onclick="confirmVisit('Declined')">Declined</button>
-        <button onclick="confirmEnd()">End / Skip</button>
-      </div>
-    </section>`; return; } }
-  if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr=n; }
-  const cur=S.geoList[S.geoPtr]||{};
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
-    <div class="field"><label>Address*</label><input id="k_addr" autocomplete="street-address" value="${(cur.addr||'').replace(/"/g,'&quot;')}"></div>
-    <div class="field"><label>Notes</label><input id="k_notes" enterkeyhint="done" placeholder="Optional"></div>
+    <div class="field">
+      <label for="k_addr">Address*</label>
+      <input id="k_addr" placeholder="1208 Maple St" autocomplete="street-address" enterkeyhint="next">
+    </div>
+    <div class="addr-row" style="margin-top:.5rem">
+      <button id="nd-locate" class="iconbtn locate" type="button" aria-label="Use My Location" title="Use My Location">
+        <span id="nd-locate-label">📍 Use My Location</span>
+      </button>
+    </div>
+    <small id="nd-locate-status" class="muted" role="status" aria-live="polite" style="display:none;margin-top:.25rem"></small>
+    <div class="field"><label for="k_notes">Notes</label>
+      <input id="k_notes" placeholder="Optional" enterkeyhint="done">
+    </div>
     <div class="btn-row">
-      <button class="primary" ${cur.eligible?'':'disabled'} onclick="confirmVisit('Lead')">Lead</button>
-      <button ${cur.eligible?'':'disabled'} onclick="confirmVisit('No Answer')">No Answer</button>
-      <button ${cur.eligible?'':'disabled'} onclick="confirmVisit('Left Literature')">Left Literature</button>
+      <button class="primary" onclick="confirmVisit('Lead')">Lead</button>
+      <button onclick="confirmVisit('Left Literature')">Left Literature</button>
       <button onclick="confirmVisit('Declined')">Declined</button>
       <button onclick="confirmEnd()">End / Skip</button>
-      <button onclick="advanceGeo()">Next Closest →</button>
-      <button onclick="refreshGeoList()">Reload Nearby</button>
     </div>
   </section>`;
+
+  const btn = el('#nd-locate');
+  const note = el('#nd-locate-status');
+  const input = el('#k_addr');
+  const label = el('#nd-locate-label');
+
+  function setStatus(msg, show=true){ 
+    if(note){ note.textContent = msg||''; note.style.display = show && msg ? 'block':'none'; } 
+  }
+  function setBusy(b){
+  if(!btn) return;
+  btn.disabled = !!b; btn.setAttribute('aria-busy', b ? 'true' : 'false');
+  if(!btn._orig){ btn._orig = btn.innerHTML; }
+  if(b){ btn.innerHTML = '⏳&nbsp;Locating…'; }
+  else { btn.innerHTML = btn._orig; }
 }
-function confirmEnd(){ if(confirm('End this door and go to next?')) advanceGeo(); }
+    }
+  }
+
+  if(btn && input){
+    btn.addEventListener('click', ()=>{
+      if(!('geolocation' in navigator)){ setStatus('Location not supported.', true); return; }
+      setBusy(true); setStatus('Getting location…', true);
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+        input.value = lat.toFixed(6) + ', ' + lon.toFixed(6);
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+        input.dispatchEvent(new Event('change', {bubbles:true}));
+        setStatus('Coordinates filled (±'+Math.round(accuracy)+'m).', true);
+        setBusy(false);
+      }, err=>{
+        const map={1:'Permission denied.',2:'Location unavailable.',3:'Timed out.'};
+        setStatus(map[err.code] || 'Location error.', true);
+        setBusy(false);
+      }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+    });
+  }
+}
+
+
+function confirmEnd(){ if(confirm('End this door and go to next?')) go('dashboard'); }
 function confirmVisit(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   if(!confirm(`Log "${outcome}" at:\\n${addr}?`)) return; postVisit_geo(outcome);
 }
-function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.geoPtr+1); S.geoPtr=(n>=0)?n:Math.min(S.geoPtr+1,S.geoList.length-1); renderKnock_geo(); }
-async function postVisit_geo(outcome){
-  const addr=(el('#k_addr')?.value||'').trim(); const notes=(el('#k_notes')?.value||'').trim();
-  if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
-  let objection=''; if(outcome==='Declined') objection=prompt('Reason for decline? (optional)','')||'';
-  const cur=S.geoList[S.geoPtr]||{};
-  const item={ type: outcome==='Lead'?'lead':'visit', date:todayISO(), time:new Date().toISOString(),
-    address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA', outcome: outcome==='Lead'? undefined : outcome, objection,
-    lat:(typeof cur.lat==='number')?cur.lat:null, lon:(typeof cur.lon==='number')?cur.lon:null };
-  try{ await sendToScript({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
-  catch(e){ S.queue.push({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
-  S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success'); if(outcome==='Lead') go('lead'); else advanceGeo();
-}
+// advanceGeo removed (no longer used)
+
 
 // Lead + photos
 function renderLead(){
@@ -282,7 +268,7 @@ function renderSettings(){
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
 async function testPost(){
   const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
-  const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'No Answer', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
+  const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'Test', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
   try{ const text=await sendToScript(payload); box.value='HTTP 200\\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); }
 }
 
