@@ -473,7 +473,36 @@ async function submitLead(){
 // === v4.8-nd: Recent doors (last N days) layer ===
 let RECENT_DOORS_LAYER = null;
 
-async function toggleRecentDoorsLayer(days){
+
+
+
+
+
+
+let __recentAutoLoaded = false;
+
+
+);
+}
+
+
+
+// === v4.8-nd: Recent doors (last N days) layer — SAFE REWRITE ===
+let RECENT_DOORS_LAYER = null;
+
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, function (c) {
+    return {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[c];
+  });
+}
+
+async function toggleRecentDoorsLayer(days) {
   if (!window.map || !window.L) return false;
   if (RECENT_DOORS_LAYER) {
     window.map.removeLayer(RECENT_DOORS_LAYER);
@@ -482,77 +511,73 @@ async function toggleRecentDoorsLayer(days){
   }
   const rows = await getRecentVisits(days);
   RECENT_DOORS_LAYER = L.layerGroup();
-  rows.forEach(r=>{
-    if (typeof r.lat !== 'number' || typeof r.lon !== 'number') return;
+  rows.forEach(function (r) {
+    if (typeof r.lat !== "number" || typeof r.lon !== "number") return;
     const m = L.marker([r.lat, r.lon]);
-    try { applyCooldownClass(m, new Date(r.ts)); } catch(_){}
-    m.bindPopup(`
-      <div class="popup">
-        <strong>${escapeHtml(r.outcome||'')}</strong>
-        <div>${escapeHtml(r.address||'')}</div>
-        <div class="muted">${new Date(r.ts).toLocaleString()}</div>
-        ${r.objection ? `<div>Reason: ${escapeHtml(r.objection)}</div>` : ``}
-        ${r.notes ? `<div class="muted">${escapeHtml(r.notes)}</div>` : ``}
-      </div>
-    `);
+    try { applyCooldownClass(m, new Date(r.ts)); } catch (_) {}
+    m.bindPopup(
+      '<div class="popup">' +
+        '<strong>' + escapeHtml(r.outcome || "") + "</strong>" +
+        "<div>" + escapeHtml(r.address || "") + "</div>" +
+        '<div class="muted">' + new Date(r.ts).toLocaleString() + "</div>" +
+        (r.objection ? "<div>Reason: " + escapeHtml(r.objection) + "</div>" : "") +
+        (r.notes ? '<div class="muted">' + escapeHtml(r.notes) + "</div>" : "") +
+      "</div>"
+    );
     RECENT_DOORS_LAYER.addLayer(m);
   });
   RECENT_DOORS_LAYER.addTo(window.map);
-  toast(`Loaded ${rows.length} visits (last ${days}d)`);
+  toast("Loaded " + rows.length + " visits (last " + days + "d)");
   return true;
 }
 
-async function getRecentVisits(days){
-  const key = `recent_visits_${days}`;
-  const metaKey = `${key}_meta`;
-  try{
-    const meta = JSON.parse(localStorage.getItem(metaKey)||'{}');
-    if (meta.ts && Date.now() - meta.ts < 10*60*1000) {
-      const cached = JSON.parse(localStorage.getItem(key)||'[]');
+async function getRecentVisits(days) {
+  const key = "recent_visits_" + days;
+  const metaKey = key + "_meta";
+  try {
+    const meta = JSON.parse(localStorage.getItem(metaKey) || "{}");
+    if (meta.ts && Date.now() - meta.ts < 10 * 60 * 1000) {
+      const cached = JSON.parse(localStorage.getItem(key) || "[]");
       return Array.isArray(cached) ? cached : [];
     }
-  }catch(_){}
-  const url = `${APPS_SCRIPT_URL}?action=visits&days=${encodeURIComponent(days)}`;
-  const res = await fetch(url, { method:'GET', cache:'no-store' });
-  if (!res.ok) { toast('Could not load recent visits'); return []; }
-  const data = await res.json().catch(()=>({rows:[]}));
+  } catch (_) {}
+  const url = APPS_SCRIPT_URL + "?action=visits&days=" + encodeURIComponent(days);
+  const res = await fetch(url, { method: "GET", cache: "no-store" });
+  if (!res.ok) { toast("Could not load recent visits"); return []; }
+  const data = await res.json().catch(function(){ return { rows: [] }; });
   const rows = Array.isArray(data.rows) ? data.rows : [];
   try {
     localStorage.setItem(key, JSON.stringify(rows));
     localStorage.setItem(metaKey, JSON.stringify({ ts: Date.now() }));
-  }catch(_){}
+  } catch (_) {}
   return rows;
 }
 
-function ensureRecentLayerUI(){
+function ensureRecentLayerUI() {
   if (!window.map || !window.L) return;
   if (ensureRecentLayerUI._added) return;
-  const ctrl = L.control({position:'topright'});
-  ctrl.onAdd = function(){
-    const div = L.DomUtil.create('div', 'recent-doors-ctrl');
-    div.innerHTML = `<button id="toggleRecentDoors" class="ghost small">90d</button>`;
+  const ctrl = L.control({ position: "topright" });
+  ctrl.onAdd = function () {
+    const div = L.DomUtil.create("div", "recent-doors-ctrl");
+    div.innerHTML = '<button id="toggleRecentDoors" class="ghost small">90d</button>';
     return div;
   };
   ctrl.addTo(window.map);
   ensureRecentLayerUI._added = true;
-  const btn = document.getElementById('toggleRecentDoors');
-  if (btn && !btn._wired){
+  const btn = document.getElementById("toggleRecentDoors");
+  if (btn && !btn._wired) {
     btn._wired = true;
-    btn.addEventListener('click', async ()=>{
+    btn.addEventListener("click", async function () {
       const active = await toggleRecentDoorsLayer(90);
-      btn.classList.toggle('active', !!active);
+      btn.classList.toggle("active", !!active);
     });
   }
 }
 
 let __recentAutoLoaded = false;
-async function maybeAutoLoadRecent(days){
+async function maybeAutoLoadRecent(days) {
   if (__recentAutoLoaded) return;
   __recentAutoLoaded = true;
-  try { await getRecentVisits(days); } catch(_){}
-}
-
-function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }[c]));
-});
+  try { await getRecentVisits(days); } catch (_) {}
 }
 
