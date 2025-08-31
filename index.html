@@ -37,22 +37,21 @@
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
 
+  
   <script>
-    function toggleDrawer(){
-      const d=document.getElementById('drawer');
-      d.classList.toggle('open'); d.setAttribute('aria-hidden', !d.classList.contains('open'));
-    }
-    function nav(tab){ toggleDrawer(); if(window.go) go(tab); }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(()=>{});
-    }
-    window.addEventListener('error', e=>{
-      const box=document.getElementById('err');
-      box.style.display='block';
-      box.textContent = 'JS Error: ' + (e.message || e.error || e);
+    document.addEventListener('DOMContentLoaded', () => {
+      function boot(){
+        if (window.go && typeof renderDashboard === 'function') {
+          go('dashboard');
+        } else {
+          setTimeout(boot, 50);
+        }
+      }
+      boot();
     });
-    document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
   </script>
+
+</script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/app.js"></script>
 </body>
