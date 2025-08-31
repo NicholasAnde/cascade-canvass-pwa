@@ -1,6 +1,5 @@
 /* ============================================================================
-  Cascade Canvass — app.js (v2 resilient startup)
-  Works even if DOMContentLoaded already fired or Leaflet loads slowly.
+  Cascade Canvass — app.js (v3: fix insertBefore parent, resilient startup)
 ============================================================================ */
 const SETTINGS_URL =
   "https://script.google.com/macros/s/AKfycbwPEUITyVd3jaSywdjO1dKiBt3M5Mn_yRt4g9UaR3be1_1HAUN0aHicGTLH12XULnANoQ/exec";
@@ -46,7 +45,9 @@ function ensureDOM() {
   let mapHost = $("#map");
   if (!mapHost) {
     mapHost = el("div", { id: "map" });
-    document.body.appendChild(mapHost);
+    // Put it into #view if present, otherwise body
+    const view = $("#view") || document.body;
+    view.appendChild(mapHost);
   }
   Object.assign(mapHost.style, {
     width: "100%",
@@ -55,7 +56,7 @@ function ensureDOM() {
     borderRadius: "10px",
   });
 
-  // Control panel (address + buttons)
+  // Control panel (address + buttons) — insert BEFORE #map within its parent
   if (!$("#control-panel")) {
     const panel = el(
       "div",
@@ -69,7 +70,8 @@ function ensureDOM() {
       },
       [
         el("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "8px" } },
-          [el("strong", { style: { color: UI.subtle } }, "Address"), el("span", { style: { color: UI.subtle, fontSize: "12px" } }, "Map center updates this")]),
+          [el("strong", { style: { color: UI.subtle } }, "Address"),
+           el("span", { style: { color: UI.subtle, fontSize: "12px" } }, "Map center updates this")]),
         el("input", {
           id: "addressInput", type: "text", placeholder: "Enter/confirm address…",
           style: {
@@ -85,8 +87,15 @@ function ensureDOM() {
         el("div", { id: "status", style: { marginTop: "10px", color: UI.subtle, fontSize: "12px" } }),
       ]
     );
+
     const mapEl = $("#map");
-    document.body.insertBefore(panel, mapEl);
+    const parent = (mapEl && mapEl.parentNode) ? mapEl.parentNode : document.body;
+    try {
+      parent.insertBefore(panel, mapEl || null);
+    } catch (err) {
+      console.warn("insertBefore fell back to appendChild:", err);
+      parent.appendChild(panel);
+    }
   }
 
   // Error bar
@@ -129,7 +138,7 @@ function waitForLeaflet(maxMs){
     const start = Date.now();
     (function check(){
       if (window.L && typeof L.map === "function") return resolve();
-      if (Date.now() - start > (maxMs||8000)) return reject(new Error("Leaflet not loaded"));
+      if (Date.now() - start > (maxMs||10000)) return reject(new Error("Leaflet not loaded"));
       setTimeout(check, 50);
     })();
   });
@@ -190,7 +199,6 @@ async function bootMap() {
 
     markersLayer = L.layerGroup().addTo(map);
 
-    // keep address in sync on pan/zoom
     map.on("moveend", async function(){
       const c = map.getCenter();
       saveLS(LS_KEYS.LAST_CENTER, { lat: c.lat, lng: c.lng, z: map.getZoom() });
@@ -206,7 +214,7 @@ async function bootMap() {
       setStatus(`Center @ ${fmtLatLng(c.lat, c.lng)}`);
     });
 
-    // if the container was hidden at init (not our case), ensure tiles render
+    // Ensure tiles lay out if container was just shown
     setTimeout(function(){ map.invalidateSize(); }, 150);
   } catch (err) {
     renderError("Map failed to initialize.");
@@ -312,7 +320,4 @@ function onClearKnocked(){
 /* --------------------- kick things off --------------------- */
 (function bootstrap(){
   ready(function(){ start(); });
-  // If this file loads after DOMContentLoaded, ready() calls start() immediately.
 })();
-
-
