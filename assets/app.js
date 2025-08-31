@@ -145,12 +145,76 @@ function renderTracker(){
   }));
 }
 
-/* Scripts (reference) */
-function renderScripts(){
-  el('#view').innerHTML = `<section class="card"><h2>Scripts</h2>
-    <div class="field"><label>Season</label><input value="${['Winter','Spring','Summer','Fall'][Math.floor(((new Date().getMonth()+1)%12)/3)]}" readonly/></div>
-    <div class="field"><label>Audience Cue</label><select><option>General</option><option>Pros</option><option>Retirees</option></select></div>
-  </section>`;
+// --- Scripts (reference) ---
+// Cache-busted URL so phones pick up changes
+const SCRIPT_URL = 'assets/scripts.json?v=472';
+
+async function renderScripts(){
+  let data = null;
+  try {
+    const r = await fetch(SCRIPT_URL, { cache: 'no-store' });
+    data = await r.json();
+  } catch (_) {
+    data = null;
+  }
+  // Fallback structure if file missing
+  data = data || {
+    seasons: {}, audience: {},
+    core: { opener:'', ask:'', close:'' },
+    rebuttals: {}
+  };
+
+  // Auto-pick season
+  const m = new Date().getMonth() + 1;
+  const season = (m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
+  const audiences = Object.keys(data.audience || {});
+  const rebuttals = data.rebuttals || {};
+
+  el('#view').innerHTML = `
+    <section class="card">
+      <h2>Scripts</h2>
+      <div class="field"><label>Season</label><input value="${season}" readonly/></div>
+      <div class="field"><label>Audience Cue</label>
+        <select id="sc_aud">${audiences.map(a=>`<option>${a}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Opener</label>
+        <textarea rows="2" readonly>${data.core.opener || ''}</textarea>
+      </div>
+      <div class="field"><label>Ask</label>
+        <textarea rows="2" readonly>${data.core.ask || ''}</textarea>
+      </div>
+      <div class="field"><label>Close</label>
+        <textarea rows="2" readonly>${data.core.close || ''}</textarea>
+      </div>
+      <div class="field"><label>Notes (Season + Audience)</label>
+        <textarea id="sc_preview" rows="3" readonly></textarea>
+      </div>
+      <div class="field"><label>Rebuttals</label>
+        <div id="rbx"></div>
+      </div>
+    </section>
+  `;
+
+  const updateNotes = () => {
+    const a = (el('#sc_aud')?.value || '');
+    const sHook = (data.seasons?.[season] || '');
+    const aCue  = (data.audience?.[a] || '');
+    el('#sc_preview').value = [sHook, aCue].filter(Boolean).join(' • ');
+  };
+  el('#sc_aud')?.addEventListener('change', updateNotes);
+  updateNotes();
+
+  // Render rebuttals A/B
+  el('#rbx').innerHTML = Object.keys(rebuttals).map(key => {
+    const rb = rebuttals[key] || {};
+    return `
+      <div class="field" style="margin-top:.4rem">
+        <label>${key}</label>
+        <div><small><b>A)</b> ${rb.A || ''}</small></div>
+        <div style="margin-top:.2rem"><small><b>B)</b> ${rb.B || ''}</small></div>
+      </div>
+    `;
+  }).join('') || '<small>No rebuttals</small>';
 }
 
 /* Settings (add Pull from Sheets) */
