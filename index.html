@@ -51,7 +51,7 @@
       box.style.display='block';
       box.textContent = 'JS Error: ' + (e.message || e.error || e);
     });
-    document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
+    document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
   </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/app.js"></script>
