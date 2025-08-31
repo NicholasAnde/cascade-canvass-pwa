@@ -184,16 +184,19 @@ async function nd_logOutcome(outcome, reason){
 }
 
 async function nd_updateAddress(){
-  // Attempt geolocation then reverse-lookup via Apps Script passthrough (optional) or fallback to no-op
-  el('#nd_addr').placeholder = 'Locating…';
+  const input = el('#nd_addr');
+  if (!input) return;
+  input.placeholder = 'Locating…';
   try{
-    const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy:true, timeout:10000 }));
+    const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy:true, timeout:12000 }));
     const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    input.value = `${lat.toFixed(5)}, ${lon.toFixed(5)} (resolving…)`;
     const addr = await reverseLookup(lat, lon);
-    if (addr) el('#nd_addr').value = addr;
-    el('#nd_addr').placeholder = addr ? 'Address found' : 'Enter address';
+    if (addr) { input.value = addr; toast('Address updated'); }
+    else { input.placeholder = 'Enter address'; toast('Could not resolve address — type it in'); }
   }catch(e){
-    el('#nd_addr').placeholder = 'Enter address';
+    input.placeholder = 'Enter address';
+    toast('Location permission denied — type address');
   }
 }
 
@@ -201,14 +204,30 @@ async function nd_updateAddress(){
 // Define APPS_SCRIPT_LOOKUP_URL externally if different from submit endpoint.
 async function reverseLookup(lat, lon){
   try{
-    const url = (typeof APPS_SCRIPT_LOOKUP_URL!=='undefined' && APPS_SCRIPT_LOOKUP_URL) 
-      ? APPS_SCRIPT_LOOKUP_URL + '?lat='+lat+'&lon='+lon 
-      : (APPS_SCRIPT_URL + '?action=reverse&lat='+lat+'&lon='+lon);
-    const res = await fetch(url, {method:'GET'});
-    if(!res.ok) throw 0;
-    const data = await res.json();
-    return data && (data.address || data.formatted_address || data.display_name) || null;
-  }catch(e){ return null; }
+    const url = (typeof APPS_SCRIPT_LOOKUP_URL!=='undefined' && APPS_SCRIPT_LOOKUP_URL)
+      ? `${APPS_SCRIPT_LOOKUP_URL}?lat=${lat}&lon=${lon}`
+      : `${APPS_SCRIPT_URL}?action=reverse&lat=${lat}&lon=${lon}`;
+    const res = await fetch(url, { method:'GET', cache:'no-store' });
+    if (res.ok){
+      const data = await res.json().catch(()=>null);
+      const a = data && (data.address || data.formatted_address || data.display_name);
+      if (a) return a;
+    }
+  }catch(_){}
+  try{
+    const last = Number(localStorage.getItem('rev_last_call_ts')||0);
+    if (Date.now() - last < 10000) { /* throttle */ }
+    const url2 = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+    const res2 = await fetch(url2, { method:'GET', headers:{ 'Accept':'application/json' }, cache:'no-store' });
+    if (res2.ok){
+      localStorage.setItem('rev_last_call_ts', String(Date.now()));
+      const d2 = await res2.json().catch(()=>null);
+      return d2 && (d2.display_name ||
+        (d2.address && `${d2.address.road||''} ${d2.address.house_number||''}, ${d2.address.city||d2.address.town||d2.address.village||''}`.trim())
+      ) || null;
+    }
+  }catch(_){}
+  return null;
 }
 
 function confirmLead(){
