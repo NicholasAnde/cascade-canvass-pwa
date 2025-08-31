@@ -7,8 +7,8 @@ var SETTINGS = {
     "gpsAddressAutoFill": true
   },
   "sheets": {
-    "scriptWebAppUrl": "https://script.google.com/macros/s/AKfycb_YOUR_DEPLOYED_WEBAPP_ID/exec",
-    "spreadsheetId": "YOUR_GOOGLE_SHEETS_ID",
+    "scriptWebAppUrl": "https://script.google.com/macros/s/AKfycbzc-fqJY56wWvFcqOnJs9Q-P5sLtm6420KX-YiZRqWOaREUjyg0jyUDLxKdlJSSTfLn4Q/exec",
+    "spreadsheetId": "1865342291",
     "tabs": {
       "leads": "Leads",
       "visits": "Visits"
@@ -38,7 +38,7 @@ var SETTINGS = {
     }
   },
   "email": {
-    "to": "leads@yourdomain.com",
+    "to": "nicholasande@gmail.com",
     "subjectPrefix": "Cascade Canvass Lead",
     "includeLocation": true
   },
@@ -51,7 +51,7 @@ var SETTINGS = {
   },
   "security": {
     "allowedOrigins": [
-      "https://your-gh-pages-username.github.io/cascade-canvass"
+      "https://nicholasande.github.io/cascade-canvass"
     ],
     "requireHttps": true
   },
