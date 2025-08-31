@@ -1,18 +1,19 @@
-const CACHE = 'cascade-v1-0-0';
+const CACHE = 'cascade-v1-0-1';
 const PRECACHE = [
-  '/index.html',
-  '/src/styles/style.css?v=100',
-  '/src/scripts/app.js?v=100',
-  '/src/scripts/api.js',
-  '/src/scripts/ui-map.js',
-  '/src/scripts/ui-lead.js',
-  '/src/scripts/ui-pulse.js',
-  '/src/scripts/ui-settings.js',
-  '/src/scripts/ui-scripts.js',
-  '/src/scripts/photos.js',
-  '/src/scripts/queue.js',
-  '/src/scripts/scripts.json'
+  'index.html',
+  'src/styles/style.css?v=101',
+  'src/scripts/app.js?v=101',
+  'src/scripts/api.js',
+  'src/scripts/ui-map.js',
+  'src/scripts/ui-lead.js',
+  'src/scripts/ui-pulse.js',
+  'src/scripts/ui-settings.js',
+  'src/scripts/ui-scripts.js',
+  'src/scripts/photos.js',
+  'src/scripts/queue.js',
+  'src/scripts/scripts.json'
 ];
+
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
   self.skipWaiting();
