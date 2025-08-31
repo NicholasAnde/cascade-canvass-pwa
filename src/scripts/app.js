@@ -1,4 +1,5 @@
 import { renderMapTab } from './ui-map.js';
+import { renderNextDoorTab } from './ui-nextdoor.js';
 import { renderLeadTab } from './ui-lead.js';
 import { renderPulseTab } from './ui-pulse.js';
 import { renderSettingsTab } from './ui-settings.js';
@@ -10,6 +11,7 @@ function getRep(){ return localStorage.getItem('repName') || 'Rep'; }
 async function route(){
   const hash = (location.hash || '#map').toLowerCase();
   const view = document.getElementById('view');
+  if (hash === '#nextdoor') return renderNextDoorTab({ mountEl:view, getRep });
   if (hash === '#lead') return renderLeadTab({ mountEl:view, getRep });
   if (hash === '#pulse') return renderPulseTab({ mountEl:view, getRep });
   if (hash === '#settings') return renderSettingsTab({ mountEl:view, getRep });
@@ -26,6 +28,7 @@ function toast(msg){
 }
 window.toast = toast;
 
+window.addEventListener('hashchange', route);
 window.addEventListener('load', async () => {
   if ('serviceWorker' in navigator) {
     try { await navigator.serviceWorker.register('src/sw.js'); } catch(e){}
