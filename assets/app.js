@@ -323,7 +323,16 @@ function renderSettings(){
     <div class="field"><label>Theme</label><select id="s_theme"><option value="dark" ${S.theme==='dark'?'selected':''}>Dark</option><option value="light" ${S.theme==='light'?'selected':''}>Light (iOS)</option></select></div>
     <div class="btn-row"><button class="primary" onclick="savePrefs()">Save</button><button onclick="retryQueue()">Retry Queue (${S.queue.length})</button><button onclick="clearQueue()">Clear Queue</button><button onclick="testPost()">Test POST</button></div>
     <div class="field"><label>Test Result</label><textarea id="adm_msg" rows="3" readonly placeholder="Run Test POST to see result"></textarea></div>
-  </section>`;
+  </section><div id="diag-row" class="diag-row" hidden>
+  <div class="diag-main">
+    <div class="diag-line"><strong>Endpoint:</strong> <span id="diag-endpoint">—</span> <span id="diag-reach" class="pill">checking…</span></div>
+    <div class="diag-line"><strong>Sheets:</strong> <span id="diag-tabs">—</span> <span id="diag-tabs-status" class="pill">checking…</span></div>
+  </div>
+  <button id="diag-toggle" class="ghost small">Show details</button>
+</div>
+`;
+  renderSettingsDiagnostics();
+
 }
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
 async function testPost(){
@@ -341,3 +350,65 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 
 // Boot
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
+
+
+/* ==== Settings Diagnostics (endpoint + tabs) ==== */
+async function diagPingEndpoint() {
+  const url = (window.APPS_SCRIPT_URL || "").trim();
+  if (!url) return { ok: false, status: "no-url" };
+  try {
+    let res = await fetch(url + (url.includes("?") ? "&" : "?") + "ping=1", { method: "GET", cache: "no-store" });
+    return { ok: res.ok, status: res.status };
+  } catch (e) {
+    return { ok: false, status: "offline" };
+  }
+}
+async function diagFetchTabs() {
+  const url = (window.APPS_SCRIPT_URL || "").trim();
+  if (!url) return { ok: false, tabs: [], status: "no-url" };
+  try {
+    const res = await fetch(url + (url.includes("?") ? "&" : "?") + "action=tabs", { method: "GET", cache: "no-store" });
+    if (!res.ok) return { ok: false, tabs: [], status: res.status };
+    const data = await res.json().catch(() => ({}));
+    const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+    return { ok: tabs.length > 0, tabs, status: res.status };
+  } catch (e) {
+    return { ok: false, tabs: [], status: "offline" };
+  }
+}
+async function renderSettingsDiagnostics() {
+  const row = document.getElementById("diag-row");
+  if (!row) return;
+  const ep = (window.APPS_SCRIPT_URL || "—");
+  const epEl = document.getElementById("diag-endpoint");
+  if (epEl) epEl.textContent = ep;
+  const ping = await diagPingEndpoint();
+  const reach = document.getElementById("diag-reach");
+  if (reach) {
+    reach.textContent = ping.ok ? "reachable" : "unreachable";
+    reach.classList.toggle("ok", !!ping.ok);
+    reach.classList.toggle("bad", !ping.ok);
+    reach.title = String(ping.status);
+  }
+  const tabs = await diagFetchTabs();
+  const tabsText = tabs.tabs && tabs.tabs.length ? tabs.tabs.join(", ") : "—";
+  const tabsEl = document.getElementById("diag-tabs");
+  if (tabsEl) tabsEl.textContent = tabsText;
+  const tstat = document.getElementById("diag-tabs-status");
+  if (tstat) {
+    tstat.textContent = tabs.ok ? "detected" : "not found";
+    tstat.classList.toggle("ok", !!tabs.ok);
+    tstat.classList.toggle("bad", !tabs.ok);
+    tstat.title = String(tabs.status);
+  }
+  row.hidden = !ep || ep === "—";
+  const btn = document.getElementById("diag-toggle");
+  if (btn && !btn._wired) {
+    btn._wired = true;
+    btn.addEventListener("click", () => {
+      const expanded = row.classList.toggle("expanded");
+      btn.textContent = expanded ? "Hide details" : "Show details";
+    });
+  }
+}
+

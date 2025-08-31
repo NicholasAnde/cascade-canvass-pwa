@@ -54,3 +54,13 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .dropdown .menu button:hover{ background:#222; }
 .btn-col .row{ display:flex; gap:.5rem; flex-wrap:wrap; }
 button.ghost{ background:transparent; border:1px solid #333 }
+
+/* === Settings Diagnostics === */
+.diag-row{ display:flex; gap:.75rem; align-items:flex-start; padding:.75rem; margin-top:.75rem;
+  border:1px solid #333; border-radius:.5rem; background:#14181c; }
+.diag-row .diag-main{ flex:1; display:grid; gap:.4rem; }
+.diag-row .diag-line{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+.pill{ padding:.15rem .5rem; border-radius:999px; border:1px solid #333; font-size:.8rem; }
+.pill.ok{ border-color:#2ecc71; }
+.pill.bad{ border-color:#e74c3c; }
+button.ghost.small{ font-size:.85rem; padding:.35rem .6rem; }
