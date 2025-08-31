@@ -38,11 +38,25 @@
   <div id="err" class="err" style="display:none"></div>
 
   
+  
+  
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       function boot(){
         if (window.go && typeof renderDashboard === 'function') {
-          go('dashboard');
+          try {
+            go('dashboard');
+            // If view stays empty after a short delay, show debug
+            setTimeout(() => {
+              const v = document.getElementById('view');
+              if (v && (!v.innerHTML || v.innerHTML.trim() === '')) {
+                v.innerHTML = '<section class="card"><h2>Debug</h2><p>Dashboard did not render.</p><p>Tap the menu (🌲) then choose <b>Dashboard</b> or <b>Next Door</b>.</p></section>';
+              }
+            }, 150);
+          } catch(e){
+            const v = document.getElementById('view');
+            if (v) v.innerHTML = '<section class="card"><h2>Boot Error</h2><pre>' + (e && (e.stack||e.message||e)) + '</pre></section>';
+          }
         } else {
           setTimeout(boot, 50);
         }
@@ -50,6 +64,8 @@
       boot();
     });
   </script>
+
+
 
 </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
