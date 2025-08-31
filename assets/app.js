@@ -295,3 +295,63 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 
 // Boot
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
+
+
+// v4.9.2: Map status badge + console diagnostics
+function mapStatusBadgeUpdate(info){
+  try{
+    let el = document.getElementById('map-status-badge');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'map-status-badge';
+      el.className = 'status-badge';
+      document.body.appendChild(el);
+    }
+    el.textContent = `Tiles:${info.tiles}  Visits:${info.visits}  Outbox:${info.outbox}`;
+  }catch(e){}
+}
+
+async function v49DiagUpdate(){
+  // tiles: check if L and map exist
+  const tiles = (window.L && window.L.tileLayer) ? 'ok' : 'n/a';
+  // visits: try global visits array or localStorage count
+  let visits = 0;
+  if (window.visits && Array.isArray(window.visits)) visits = window.visits.length;
+  else {
+    try{ const v = JSON.parse(localStorage.getItem('visits')||'[]'); if(Array.isArray(v)) visits = v.length; }catch(e){}
+  }
+  // outbox: try IndexedDB (v4.9 DB)
+  let outbox = 0;
+  try{
+    await new Promise((resolve,reject)=>{
+      const req = indexedDB.open('canvass_v49', 1);
+      req.onsuccess = ()=>{
+        const db = req.result;
+        const tx = db.transaction('outbox','readonly');
+        const getAll = tx.objectStore('outbox').getAll();
+        getAll.onsuccess = ()=>{ outbox = (getAll.result||[]).length; resolve(); };
+        getAll.onerror = ()=>resolve();
+      };
+      req.onerror = ()=>resolve();
+      req.onupgradeneeded = ()=>resolve();
+    });
+  }catch(e){}
+  const info = {tiles, visits, outbox};
+  console.log('[v4.9.2] Map status', info);
+  mapStatusBadgeUpdate(info);
+}
+
+// Hook into nav('map') if available
+(function(){
+  const _nav = window.nav;
+  if (typeof _nav === 'function'){
+    window.nav = function(route){
+      const r = _nav.apply(this, arguments);
+      if (route==='map') { setTimeout(v49DiagUpdate, 250); }
+      return r;
+    }
+  } else {
+    // fallback: update on load
+    window.addEventListener('load', ()=> setTimeout(v49DiagUpdate, 500));
+  }
+})();

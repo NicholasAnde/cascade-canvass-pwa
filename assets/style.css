@@ -46,3 +46,9 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pills{display:flex;gap:.5rem}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* v4.9.2: hide any stray Next Door triggers */
+[onclick*="nextdoor"], .nextdoor, a.nextdoor { display: none !important; }
+
+/* v4.9.2: Map status badge */
+.status-badge{position:fixed;right:10px;bottom:58px;z-index:9999;padding:6px 10px;border-radius:8px;background:#2228;backdrop-filter:blur(6px);font-size:12px;line-height:1.2}
