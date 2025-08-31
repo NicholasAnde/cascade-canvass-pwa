@@ -60,33 +60,34 @@
   <div id="err" class="err" style="display:none"></div>
 
   
-  <script>
-  (function nextDoorMatchAddressOnly(){
-    function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
-    ready(()=>{
-      // Helper: find the "Next Door" card by header text
-      const h2s = Array.from(document.querySelectorAll('h2,h3'));
-      let card = null;
-      for(const h of h2s){
-        if((h.textContent||'').trim().toLowerCase()==='next door'){
-          // assume card container is parent or grandparent with inputs
-          let n=h;
-          for(let i=0;i<3;i++){ if(n && n.querySelector && n.querySelector('input')){ card=n; break; } n=n.parentElement; }
-          if(!card){ card = h.closest('.card') || h.parentElement; }
-          break;
-        }
-      }
-      if(!card) return;
+  
 
-      // Locate the address input inside this card
-      let addressInput = Array.from(card.querySelectorAll('input')).find(el=>{
+
+
+  
+
+
+  <script>
+  (function nextDoorObserver(){
+    function qs(root, sel){ return (root||document).querySelector(sel); }
+    function qsa(root, sel){ return Array.from((root||document).querySelectorAll(sel)); }
+    function isNextDoorCard(node){
+      if(!node) return false;
+      // Heuristic: card that has an h2/h3 with "Next Door"
+      const header = qsa(node, 'h1,h2,h3').find(h => (h.textContent||'').trim().toLowerCase()==='next door');
+      return !!header;
+    }
+    function findAddressInput(card){
+      return qsa(card, 'input').find(el=>{
         const idn=(el.id||'').toLowerCase(), nm=(el.name||'').toLowerCase(), ph=(el.placeholder||'').toLowerCase();
         const lbl=(el.getAttribute('aria-label')||'').toLowerCase();
         return idn.includes('address')||nm.includes('address')||ph.includes('address')||lbl.includes('address');
       });
-      if(!addressInput) return;
-
-      // Build the button row (below the address input)
+    }
+    function ensureMatchButton(card){
+      if(qs(card, '#nd-locate')) return; // already added
+      const input = findAddressInput(card);
+      if(!input) return;
       const wrap = document.createElement('div');
       wrap.className='addr-row';
       const btn = document.createElement('button');
@@ -95,22 +96,9 @@
       btn.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z"></path></svg><span>Match Address</span>';
       const note = document.createElement('small'); note.id='nd-locate-status'; note.className='muted'; note.setAttribute('role','status'); note.setAttribute('aria-live','polite');
       wrap.appendChild(btn);
-      addressInput.insertAdjacentElement('afterend', wrap);
+      input.insertAdjacentElement('afterend', wrap);
       wrap.insertAdjacentElement('afterend', note);
 
-      // Remove Top-bar "Match Address" (if any) by text match
-      Array.from(document.querySelectorAll('button')).forEach(b=>{
-        const t=(b.textContent||'').trim().toLowerCase();
-        if(t==='match address' && !wrap.contains(b)){ b.remove(); }
-      });
-
-      // Remove "Next Closet" and "No Answer" buttons
-      Array.from(document.querySelectorAll('button')).forEach(b=>{
-        const t=(b.textContent||'').trim().toLowerCase();
-        if(t==='no answer' || t==='next closet' || t==='next closest'){ b.remove(); }
-      });
-
-      // Fill with lat,lon only (no geocoding)
       function setStatus(msg){ note.textContent = msg||''; }
       function setBusy(b){ btn.disabled = !!b; btn.setAttribute('aria-busy', b ? 'true' : 'false'); }
 
@@ -119,9 +107,9 @@
         setBusy(true); setStatus('Getting location…');
         navigator.geolocation.getCurrentPosition(pos=>{
           const { latitude: lat, longitude: lon, accuracy } = pos.coords;
-          addressInput.value = lat.toFixed(6) + ', ' + lon.toFixed(6);
-          addressInput.dispatchEvent(new Event('input', {bubbles:true}));
-          addressInput.dispatchEvent(new Event('change', {bubbles:true}));
+          input.value = lat.toFixed(6) + ', ' + lon.toFixed(6);
+          input.dispatchEvent(new Event('input', {bubbles:true}));
+          input.dispatchEvent(new Event('change', {bubbles:true}));
           setStatus('Coordinates filled (±'+Math.round(accuracy)+'m).');
           setBusy(false);
         }, err=>{
@@ -130,10 +118,44 @@
           setBusy(false);
         }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
       });
+    }
+
+    function pruneUnwanted(){
+      // Remove any global/top-bar Match Address buttons
+      qsa(document,'button').forEach(b=>{
+        const t=(b.textContent||'').trim().toLowerCase();
+        if(t==='match address' && !b.closest('.addr-row')){ b.remove(); }
+        if(t==='no answer' || t==='next closet' || t==='next closest'){ b.remove(); }
+      });
+    }
+
+    function scan(){
+      pruneUnwanted();
+      qsa(document, '.card').forEach(card=>{
+        if(isNextDoorCard(card)){ ensureMatchButton(card); }
+      });
+    }
+
+    // Initial scan
+    if(document.readyState!=='loading') scan();
+    else document.addEventListener('DOMContentLoaded', scan);
+
+    // Observe changes under main/view container (fallback to body)
+    const target = qs(document,'#view') || document.body;
+    const mo = new MutationObserver((muts)=>{
+      for(const m of muts){
+        for(const node of m.addedNodes){
+          if(!(node instanceof HTMLElement)) continue;
+          pruneUnwanted();
+          if(node.matches && node.matches('.card') && isNextDoorCard(node)){ ensureMatchButton(node); }
+          // Also rescan if subtree likely includes our card
+          if(node.querySelector && node.querySelector('h2,h3')) scan();
+        }
+      }
     });
+    mo.observe(target, { childList:true, subtree:true });
   })();
   </script>
-
 
 </body>
 </html>
