@@ -399,7 +399,10 @@ function v493LoadMarkers(){
 })();
 
 
-/* v4.9.3: Marker fallback + diagnostics */
+
+
+
+/* v4.9.4: Marker fallback safe IndexedDB */
 (function(){
   function ensureLayer(){
     if (!window.v49Markers && window.L && window.map){
@@ -408,7 +411,6 @@ function v493LoadMarkers(){
     return window.v49Markers || null;
   }
   async function getVisitPoints(){
-    // Try IndexedDB visits store (v4.9)
     let points = [];
     try{
       const idx = await new Promise((resolve)=> {
@@ -417,7 +419,7 @@ function v493LoadMarkers(){
         req.onerror = ()=>resolve(null);
         req.onupgradeneeded = ()=>resolve(null);
       });
-      if (idx){
+      if (idx && idx.objectStoreNames.contains('visits')){
         points = await new Promise((resolve)=>{
           try{
             const tx = idx.transaction('visits','readonly');
@@ -428,7 +430,6 @@ function v493LoadMarkers(){
         });
       }
     }catch(e){}
-    // Also look in localStorage for backward compat
     try{
       const ls = JSON.parse(localStorage.getItem('visitsLog')||'[]');
       if (Array.isArray(ls)) points = points.concat(ls);
@@ -438,7 +439,6 @@ function v493LoadMarkers(){
   async function drawMarkers(){
     const group = ensureLayer();
     if (!group || !window.map || !window.L) return;
-    // heuristic: consider points with lat/lng OR geo.lat/geo.lng
     const pts = await getVisitPoints();
     let added = 0;
     pts.forEach(p=>{
@@ -450,16 +450,12 @@ function v493LoadMarkers(){
       }
     });
     if (added===0){
-      // add demo marker at center so you can verify rendering
-      try{
-        const c = window.map.getCenter();
-        L.marker([c.lat, c.lng], {title:'Demo Visit'}).addTo(group);
-        added = 1;
-      }catch(e){}
+      const c = window.map.getCenter();
+      L.marker([c.lat, c.lng], {title:'Demo Visit'}).addTo(group);
+      added = 1;
     }
-    console.log('[v4.9.3] markers loaded:', added);
+    console.log('[v4.9.4] markers loaded:', added);
   }
-  // Hook into nav('map')
   const _nav = window.nav;
   if (typeof _nav === 'function'){
     window.nav = function(route){
@@ -471,3 +467,10 @@ function v493LoadMarkers(){
     window.addEventListener('load', ()=> setTimeout(drawMarkers, 800));
   }
 })();
+\n
+// v4.9.4: ensure map-first redirect on fresh load
+window.addEventListener('load', ()=>{
+  try{
+    if (typeof nav==='function'){ nav('map'); }
+  }catch(e){}
+});
