@@ -119,10 +119,9 @@ async function renderKnock_geo(){
       <div class="field"><label>Notes</label><input id="k_notes" placeholder="Optional" enterkeyhint="done"></div>
       <div class="btn-row">
         <button class="primary" onclick="confirmVisit('Lead')">Lead</button>
-        <button onclick="confirmVisit('No Answer')">No Answer</button>
-        <button onclick="confirmVisit('Left Literature')">Left Literature</button>
+<button onclick="confirmVisit('Left Literature')">Left Literature</button>
         <button onclick="confirmVisit('Declined')">Declined</button>
-        <button onclick="confirmEnd()">End / Skip</button>
+        <button onclick="confirmSkip()">Skip</button>
       </div>
     </section>`; return; } }
   if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr=n; }
@@ -132,16 +131,13 @@ async function renderKnock_geo(){
     <div class="field"><label>Notes</label><input id="k_notes" enterkeyhint="done" placeholder="Optional"></div>
     <div class="btn-row">
       <button class="primary" ${cur.eligible?'':'disabled'} onclick="confirmVisit('Lead')">Lead</button>
-      <button ${cur.eligible?'':'disabled'} onclick="confirmVisit('No Answer')">No Answer</button>
-      <button ${cur.eligible?'':'disabled'} onclick="confirmVisit('Left Literature')">Left Literature</button>
+<button ${cur.eligible?'':'disabled'} onclick="confirmVisit('Left Literature')">Left Literature</button>
       <button onclick="confirmVisit('Declined')">Declined</button>
-      <button onclick="confirmEnd()">End / Skip</button>
-      <button onclick="advanceGeo()">Next Closest →</button>
-      <button onclick="refreshGeoList()">Reload Nearby</button>
-    </div>
+      <button onclick="confirmSkip()">Skip</button>
+</div>
   </section>`;
 }
-function confirmEnd(){ if(confirm('End this door and go to next?')) advanceGeo(); }
+function confirmSkip(){ if(confirm('End this door and go to next?')) advanceGeo(); }
 function confirmVisit(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   if(!confirm(`Log "${outcome}" at:\\n${addr}?`)) return; postVisit_geo(outcome);
@@ -282,7 +278,7 @@ function renderSettings(){
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
 async function testPost(){
   const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
-  const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'No Answer', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
+  const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
   try{ const text=await sendToScript(payload); box.value='HTTP 200\\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); }
 }
 
