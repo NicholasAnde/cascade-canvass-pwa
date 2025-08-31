@@ -74,19 +74,8 @@ function lastIndex(){ return (S.visitsLog||[]).reduce((m,v)=>{ const a=(v.addres
   if(!a||!t) return m; if(!m[a]||new Date(t)>new Date(m[a])) m[a]=t; return m; },{}); }
 let _busy=false;
 async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
-  if(_busy) return S.geoList; _busy=true;
-  try{
-    const q=`[out:json][timeout:20];(node["addr:housenumber"]["addr:street"](around:${r},${lat},${lon});way["addr:housenumber"]["addr:street"](around:${r},${lat},${lon}););out center ${l};`;
-    const j=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({data:q})}).then(r=>r.json());
-    const uniq=new Map();
-    for(const e of (j.elements||[])){ const tags=e.tags||{}; const addr=fmtAddr(tags); if(!addr) continue;
-      const la=e.lat??e.center?.lat, lo=e.lon??e.center?.lon; if(la==null||lo==null) continue; if(!uniq.has(addr)) uniq.set(addr,{addr,lat:la,lon:lo}); }
-    const here={lat,lon}, idx=lastIndex();
-    S.geoList = []; // geocoding removed const last=idx[o.addr]||null;
-      const d=last?daysSince(last):Infinity; const eligible=(d===Infinity)||(d>=S.cooldownDays); return {...o,dist,last,days:(d===Infinity?null:d),eligible}; })
-      .sort((a,b)=> a.eligible===b.eligible ? (a.dist-b.dist) : (a.eligible?-1:1)).slice(0,l);
-    return S.geoList;
-  } finally { _busy=false; }
+  // geocoding removed: return empty list
+  return [];
 }
 async function refreshGeoList(){
   if(!navigator.geolocation){ showToast('Geolocation not available','error'); return false; }
@@ -99,14 +88,10 @@ async function refreshGeoList(){
 function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.geoList[i]?.eligible) return i; } return -1; }
 
 // -------- views --------
-function renderDashboard(){
-  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
-    <div class="btn-row">
-      <button class="primary" onclick="go('knock')">Next Door</button>
-      <button onclick="go('lead')">New Lead</button>
-      <button onclick="go('tracker')">Lead Tracker</button>
-      <button onclick="go('maptoday')">Map</button>
-      <button onclick="go('scripts')">Scripts</button>
+async function refreshGeoList(){
+  // geocoding removed: nothing to refresh
+  return false;
+}
       <button onclick="go('settings')">Settings</button>
     </div>
   </section>`;
@@ -472,4 +457,3 @@ document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
   document.addEventListener('DOMContentLoaded', injectToggle);
   setInterval(injectToggle, 1000);
 })();
-
