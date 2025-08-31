@@ -65,7 +65,8 @@ function downloadCSV(name, rows){ if(!rows.length){ showToast('No data to export
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([toCSV(rows)],{type:'text/csv'})); a.download=name; a.click(); }
 
 // -------- geocoder + cooldown --------
-const KM=(a,b)=>Infinity; // geocoding removed: distance disabled
+const KM=(a,b)=>{ const R=6371e3, toRad=x=>x*Math.PI/180; const dlat=toRad(b.lat-a.lat), dlon=toRad(b.lon-a.lon);
+  const la1=toRad(a.lat), la2=toRad(b.lat); const x=Math.sin(dlat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dlon/2)**2; return 2*R*Math.asin(Math.sqrt(x)); };
 function fmtAddr(tags){ const num=tags['addr:housenumber']||'', street=tags['addr:street']||tags['name']||'', unit=tags['addr:unit']||'', city=tags['addr:city']||tags['addr:suburb']||'';
   return [num,street,unit?('#'+unit):'',city].filter(Boolean).join(' ').replace(/\\s+/g,' ').trim(); }
 function lastIndex(){ return (S.visitsLog||[]).reduce((m,v)=>{ const a=(v.address||'').trim(), t=v.time||v.date||'';
@@ -80,7 +81,7 @@ async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
     for(const e of (j.elements||[])){ const tags=e.tags||{}; const addr=fmtAddr(tags); if(!addr) continue;
       const la=e.lat??e.center?.lat, lo=e.lon??e.center?.lon; if(la==null||lo==null) continue; if(!uniq.has(addr)) uniq.set(addr,{addr,lat:la,lon:lo}); }
     const here={lat,lon}, idx=lastIndex();
-    S.geoList = []; // geocoding removed const last=idx[o.addr]||null;
+    S.geoList = Array.from(uniq.values()).map(o=>{ const dist=KM(here,{lat:o.lat,lon:o.lon}); const last=idx[o.addr]||null;
       const d=last?daysSince(last):Infinity; const eligible=(d===Infinity)||(d>=S.cooldownDays); return {...o,dist,last,days:(d===Infinity?null:d),eligible}; })
       .sort((a,b)=> a.eligible===b.eligible ? (a.dist-b.dist) : (a.eligible?-1:1)).slice(0,l);
     return S.geoList;
@@ -89,7 +90,8 @@ async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
 async function refreshGeoList(){
   if(!navigator.geolocation){ showToast('Geolocation not available','error'); return false; }
   return new Promise(res=>{
-    /* geolocation removed */; S.geoPtr = 0; // geocoding removed showToast('Nearby loaded ✓','success'); res(true); }
+    navigator.geolocation.getCurrentPosition(async p=>{
+      try{ await fetchNearby(p.coords.latitude,p.coords.longitude); S.geoPtr=0; showToast('Nearby loaded ✓','success'); res(true); }
       catch(e){ showToast('Geocoder error','error'); res(false); }
     }, ()=>{ showToast('Location error','error'); res(false); });
   });
@@ -123,7 +125,7 @@ async function renderKnock_geo(){
         <button onclick="confirmEnd()">End / Skip</button>
       </div>
     </section>`; return; } }
-  if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr = 0; // geocoding removed }
+  if(!S.geoList[S.geoPtr]?.eligible){ const n=nextEligiblePtr(S.geoPtr); if(n>=0) S.geoPtr=n; }
   const cur=S.geoList[S.geoPtr]||{};
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
     <div class="field"><label>Address*</label><input id="k_addr" autocomplete="street-address" value="${(cur.addr||'').replace(/"/g,'&quot;')}"></div>
@@ -144,7 +146,7 @@ function confirmVisit(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   if(!confirm(`Log "${outcome}" at:\\n${addr}?`)) return; postVisit_geo(outcome);
 }
-function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.geoPtr+1); S.geoPtr = 0; // geocoding removed renderKnock_geo(); }
+function advanceGeo(){ if(!S.geoList.length) return; const n=nextEligiblePtr(S.geoPtr+1); S.geoPtr=(n>=0)?n:Math.min(S.geoPtr+1,S.geoList.length-1); renderKnock_geo(); }
 async function postVisit_geo(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); const notes=(el('#k_notes')?.value||'').trim();
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
@@ -293,7 +295,3 @@ function clearQueue(){ if(!S.queue.length){ showToast('Queue already empty','inf
 
 // Boot
 document.addEventListener('DOMContentLoaded', ()=> go('dashboard'));
-
-/*NEXT_DOOR_FEATURE*/
-
-/*NEXT_DOOR_SETTINGS*/
