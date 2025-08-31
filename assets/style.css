@@ -64,3 +64,9 @@ button.ghost{ background:transparent; border:1px solid #333 }
 .pill.ok{ border-color:#2ecc71; }
 .pill.bad{ border-color:#e74c3c; }
 button.ghost.small{ font-size:.85rem; padding:.35rem .6rem; }
+
+/* === v4.8-nd recent doors chip === */
+.recent-doors-ctrl{ position:absolute; right:10px; top:10px; }
+.recent-doors-ctrl .small{ font-size:.85rem; padding:.35rem .6rem; }
+.recent-doors-ctrl .active{ border-color:#2ecc71; }
+.popup .muted{ opacity:.75; font-size:.9rem; }
