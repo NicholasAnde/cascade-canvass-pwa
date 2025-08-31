@@ -76,7 +76,9 @@ function downloadCSV(name, rows){ if(!rows.length){ showToast('No data to export
 
 
 
+
 async function renderKnock_geo(){
+  // Manual Next Door — no geocoding; lat,lon only
   el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
     <div class="field">
       <label for="k_addr">Address*</label>
@@ -88,7 +90,8 @@ async function renderKnock_geo(){
       </button>
     </div>
     <small id="nd-locate-status" class="muted" role="status" aria-live="polite" style="display:none;margin-top:.25rem"></small>
-    <div class="field"><label for="k_notes">Notes</label>
+    <div class="field">
+      <label for="k_notes">Notes</label>
       <input id="k_notes" placeholder="Optional" enterkeyhint="done">
     </div>
     <div class="btn-row">
@@ -99,44 +102,44 @@ async function renderKnock_geo(){
     </div>
   </section>`;
 
-  const btn = el('#nd-locate');
+  const btn  = el('#nd-locate');
   const note = el('#nd-locate-status');
-  const input = el('#k_addr');
-  const label = el('#nd-locate-label');
+  const input= el('#k_addr');
+  const label= el('#nd-locate-label');
 
-  function setStatus(msg, show=true){ 
-    if(note){ note.textContent = msg||''; note.style.display = show && msg ? 'block':'none'; } 
+  function setStatus(msg){
+    if(!note) return;
+    note.textContent = msg || '';
+    note.style.display = msg ? 'block' : 'none';
   }
   function setBusy(b){
-  if(!btn) return;
-  btn.disabled = !!b; btn.setAttribute('aria-busy', b ? 'true' : 'false');
-  if(!btn._orig){ btn._orig = btn.innerHTML; }
-  if(b){ btn.innerHTML = '⏳&nbsp;Locating…'; }
-  else { btn.innerHTML = btn._orig; }
-}
+    if(!btn) return;
+    btn.disabled = !!b;
+    btn.setAttribute('aria-busy', b ? 'true' : 'false');
+    if(label){
+      label.textContent = b ? '⏳ Locating…' : '📍 Use My Location';
     }
   }
 
   if(btn && input){
     btn.addEventListener('click', ()=>{
-      if(!('geolocation' in navigator)){ setStatus('Location not supported.', true); return; }
-      setBusy(true); setStatus('Getting location…', true);
+      if(!('geolocation' in navigator)){ setStatus('Location not supported.'); return; }
+      setBusy(true); setStatus('Getting location…');
       navigator.geolocation.getCurrentPosition(pos=>{
         const { latitude: lat, longitude: lon, accuracy } = pos.coords;
         input.value = lat.toFixed(6) + ', ' + lon.toFixed(6);
         input.dispatchEvent(new Event('input', {bubbles:true}));
         input.dispatchEvent(new Event('change', {bubbles:true}));
-        setStatus('Coordinates filled (±'+Math.round(accuracy)+'m).', true);
+        setStatus('Coordinates filled (±'+Math.round(accuracy)+'m).');
         setBusy(false);
       }, err=>{
         const map={1:'Permission denied.',2:'Location unavailable.',3:'Timed out.'};
-        setStatus(map[err.code] || 'Location error.', true);
+        setStatus(map[err.code] || 'Location error.');
         setBusy(false);
       }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
     });
   }
 }
-
 
 function confirmEnd(){ if(confirm('End this door and go to next?')) go('dashboard'); }
 function confirmVisit(outcome){
