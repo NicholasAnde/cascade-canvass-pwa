@@ -355,3 +355,119 @@ async function v49DiagUpdate(){
     window.addEventListener('load', ()=> setTimeout(v49DiagUpdate, 500));
   }
 })();
+
+
+// v4.9.3: enforce map-first + marker fallback
+window.addEventListener('load', ()=>{
+  try {
+    // force default route to map
+    if (typeof nav==='function') nav('map');
+  } catch(e){}
+});
+
+function v493LoadMarkers(){
+  try {
+    if (!window.L || !window.map) { console.warn('[v4.9.3] Leaflet map not ready'); return; }
+    let data = [];
+    try {
+      data = JSON.parse(localStorage.getItem('visitsLog')||'[]');
+    } catch(e){}
+    if (!Array.isArray(data) || !data.length){
+      // fallback dummy marker
+      data = [{lat:45.633, lng:-122.671, outcome:'demo'}];
+    }
+    data.forEach(v=>{
+      if(v.lat && v.lng){
+        let color = (v.outcome==='Lead'?'green': v.outcome==='Left Lit'?'blue': v.outcome==='Declined'?'red':'orange');
+        const m = L.circleMarker([v.lat, v.lng], {radius:8,color}).addTo(window.map);
+        m.bindPopup(v.outcome||'Visit');
+      }
+    });
+    console.log('[v4.9.3] markers loaded:', data.length);
+  } catch(e){ console.error('[v4.9.3] marker loader error', e); }
+}
+
+(function(){
+  const _nav = window.nav;
+  if(typeof _nav==='function'){
+    window.nav = function(route){
+      const r = _nav.apply(this, arguments);
+      if(route==='map') setTimeout(v493LoadMarkers, 400);
+      return r;
+    }
+  }
+})();
+
+
+/* v4.9.3: Marker fallback + diagnostics */
+(function(){
+  function ensureLayer(){
+    if (!window.v49Markers && window.L && window.map){
+      window.v49Markers = L.layerGroup().addTo(window.map);
+    }
+    return window.v49Markers || null;
+  }
+  async function getVisitPoints(){
+    // Try IndexedDB visits store (v4.9)
+    let points = [];
+    try{
+      const idx = await new Promise((resolve)=> {
+        const req = indexedDB.open('canvass_v49', 1);
+        req.onsuccess = ()=>resolve(req.result);
+        req.onerror = ()=>resolve(null);
+        req.onupgradeneeded = ()=>resolve(null);
+      });
+      if (idx){
+        points = await new Promise((resolve)=>{
+          try{
+            const tx = idx.transaction('visits','readonly');
+            const ok = tx.objectStore('visits').getAll();
+            ok.onsuccess = ()=>resolve(ok.result||[]);
+            ok.onerror = ()=>resolve([]);
+          }catch(e){ resolve([]); }
+        });
+      }
+    }catch(e){}
+    // Also look in localStorage for backward compat
+    try{
+      const ls = JSON.parse(localStorage.getItem('visitsLog')||'[]');
+      if (Array.isArray(ls)) points = points.concat(ls);
+    }catch(e){}
+    return points;
+  }
+  async function drawMarkers(){
+    const group = ensureLayer();
+    if (!group || !window.map || !window.L) return;
+    // heuristic: consider points with lat/lng OR geo.lat/geo.lng
+    const pts = await getVisitPoints();
+    let added = 0;
+    pts.forEach(p=>{
+      const lat = (p.lat ?? p.latitude ?? (p.geo && p.geo.lat));
+      const lng = (p.lng ?? p.longitude ?? (p.geo && p.geo.lng));
+      if (typeof lat==='number' && typeof lng==='number'){
+        L.marker([lat,lng]).addTo(group);
+        added++;
+      }
+    });
+    if (added===0){
+      // add demo marker at center so you can verify rendering
+      try{
+        const c = window.map.getCenter();
+        L.marker([c.lat, c.lng], {title:'Demo Visit'}).addTo(group);
+        added = 1;
+      }catch(e){}
+    }
+    console.log('[v4.9.3] markers loaded:', added);
+  }
+  // Hook into nav('map')
+  const _nav = window.nav;
+  if (typeof _nav === 'function'){
+    window.nav = function(route){
+      const r = _nav.apply(this, arguments);
+      if (route==='map'){ setTimeout(drawMarkers, 400); }
+      return r;
+    }
+  } else {
+    window.addEventListener('load', ()=> setTimeout(drawMarkers, 800));
+  }
+})();
