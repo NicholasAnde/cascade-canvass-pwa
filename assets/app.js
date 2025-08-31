@@ -1,4 +1,4 @@
-// v4.7.2 — full app: geocoder Next Door + cooldown, Map Today/7d, lead photos (gallery/camera) + preview + scaling, CORS-safe posts, stacked buttons, pine icon, Test POST, queue, light/dark.
+// v4.7.2 — full app: geocoder RemovedNextDoor + cooldown, Map Today/7d, lead photos (gallery/camera) + preview + scaling, CORS-safe posts, stacked buttons, pine icon, Test POST, queue, light/dark.
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -49,7 +49,6 @@ function statsBarHTML(){ const c=counts(); return `<div class="statsbar">
 // -------- router --------
 function go(tab){
   if(tab==='dashboard') return renderDashboard();
-  if(tab==='knock') return renderKnock_geo();
   if(tab==='lead') return renderLead();
   if(tab==='tracker') return renderTracker();
   if(tab==='maptoday') return renderMapToday();
@@ -65,106 +64,61 @@ function downloadCSV(name, rows){ if(!rows.length){ showToast('No data to export
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([toCSV(rows)],{type:'text/csv'})); a.download=name; a.click(); }
 
 // -------- geocoder + cooldown --------
-// removed unused geocoder function
+const KM=(a,b)=>{ const R=6371e3, toRad=x=>x*Math.PI/180; const dlat=toRad(b.lat-a.lat), dlon=toRad(b.lon-a.lon);
+  const la1=toRad(a.lat), la2=toRad(b.lat); const x=Math.sin(dlat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dlon/2)**2; return 2*R*Math.asin(Math.sqrt(x)); };
+function fmtAddr(tags){ const num=tags['addr:housenumber']||'', street=tags['addr:street']||tags['name']||'', unit=tags['addr:unit']||'', city=tags['addr:city']||tags['addr:suburb']||'';
+  return [num,street,unit?('#'+unit):'',city].filter(Boolean).join(' ').replace(/\\s+/g,' ').trim(); }
+function lastIndex(){ return (S.visitsLog||[]).reduce((m,v)=>{ const a=(v.address||'').trim(), t=v.time||v.date||'';
+  if(!a||!t) return m; if(!m[a]||new Date(t)>new Date(m[a])) m[a]=t; return m; },{}); }
+let _busy=false;
+async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
+  if(_busy) return S.geoList; _busy=true;
+  try{
+    const q=`[out:json][timeout:20];(node["addr:housenumber"]["addr:street"](around:${r},${lat},${lon});way["addr:housenumber"]["addr:street"](around:${r},${lat},${lon}););out center ${l};`;
+    const j=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({data:q})}).then(r=>r.json());
+    const uniq=new Map();
+    for(const e of (j.elements||[])){ const tags=e.tags||{}; const addr=fmtAddr(tags); if(!addr) continue;
+      const la=e.lat??e.center?.lat, lo=e.lon??e.center?.lon; if(la==null||lo==null) continue; if(!uniq.has(addr)) uniq.set(addr,{addr,lat:la,lon:lo}); }
+    const here={lat,lon}, idx=lastIndex();
+    S.geoList = Array.from(uniq.values()).map(o=>{ const dist=KM(here,{lat:o.lat,lon:o.lon}); const last=idx[o.addr]||null;
+      const d=last?daysSince(last):Infinity; const eligible=(d===Infinity)||(d>=S.cooldownDays); return {...o,dist,last,days:(d===Infinity?null:d),eligible}; })
+      .sort((a,b)=> a.eligible===b.eligible ? (a.dist-b.dist) : (a.eligible?-1:1)).slice(0,l);
+    return S.geoList;
+  } finally { _busy=false; }
+}
+async function refreshGeoList(){
+  if(!navigator.geolocation){ showToast('Geolocation not available','error'); return false; }
+  return new Promise(res=>{
+    navigator.geolocation.getCurrentPosition(async p=>{
+      try{ await fetchNearby(p.coords.latitude,p.coords.longitude); S.geoPtr=0; showToast('Nearby loaded ✓','success'); res(true); }
+      catch(e){ showToast('Geocoder error','error'); res(false); }
+    }, ()=>{ showToast('Location error','error'); res(false); });
+  });
+}
+function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.geoList[i]?.eligible) return i; } return -1; }
 
-// removed unused geocoder function
-
-// refreshGeoList removed (no longer used)
-
-// nextEligiblePtr removed (no longer used)
-
-
-
-
-
-async function renderKnock_geo(){
-  // Manual Next Door — no geocoding; lat,lon only
-  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Next Door</h2>
-    <div class="field">
-      <label for="k_addr">Address*</label>
-      <input id="k_addr" placeholder="1208 Maple St" autocomplete="street-address" enterkeyhint="next">
-    </div>
-    <div class="addr-row" style="margin-top:.5rem">
-      <button id="nd-locate" class="iconbtn locate" type="button" aria-label="Use My Location" title="Use My Location">
-        <span id="nd-locate-label">📍 Use My Location</span>
-      </button>
-    </div>
-    <small id="nd-locate-status" class="muted" role="status" aria-live="polite" style="display:none;margin-top:.25rem"></small>
-    <div class="field">
-      <label for="k_notes">Notes</label>
-      <input id="k_notes" placeholder="Optional" enterkeyhint="done">
-    </div>
+// -------- views --------
+function renderDashboard(){
+  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>Home</h2>
     <div class="btn-row">
-      <button class="primary" onclick="confirmVisit('Lead')">Lead</button>
-      <button onclick="confirmVisit('Left Literature')">Left Literature</button>
-      <button onclick="confirmVisit('Declined')">Declined</button>
-      <button onclick="confirmEnd()">End / Skip</button>
+<button onclick="go('lead')">New Lead</button>
+      <button onclick="go('tracker')">Lead Tracker</button>
+      <button onclick="go('maptoday')">Map</button>
+      <button onclick="go('scripts')">Scripts</button>
+      <button onclick="go('settings')">Settings</button>
     </div>
   </section>`;
-
-  const btn  = el('#nd-locate');
-  const note = el('#nd-locate-status');
-  const input= el('#k_addr');
-  const label= el('#nd-locate-label');
-
-  function setStatus(msg){
-    if(!note) return;
-    note.textContent = msg || '';
-    note.style.display = msg ? 'block' : 'none';
-  }
-  function setBusy(b){
-    if(!btn) return;
-    btn.disabled = !!b;
-    btn.setAttribute('aria-busy', b ? 'true' : 'false');
-    if(label){
-      label.textContent = b ? '⏳ Locating…' : '📍 Use My Location';
-    }
-  }
-
-  if(btn && input){
-    btn.addEventListener('click', ()=>{
-      if(!('geolocation' in navigator)){ setStatus('Location not supported.'); return; }
-      setBusy(true); setStatus('Getting location…');
-      navigator.geolocation.getCurrentPosition(pos=>{
-        const { latitude: lat, longitude: lon, accuracy } = pos.coords;
-        input.value = lat.toFixed(6) + ', ' + lon.toFixed(6);
-        input.dispatchEvent(new Event('input', {bubbles:true}));
-        input.dispatchEvent(new Event('change', {bubbles:true}));
-        setStatus('Coordinates filled (±'+Math.round(accuracy)+'m).');
-        setBusy(false);
-      }, err=>{
-        const map={1:'Permission denied.',2:'Location unavailable.',3:'Timed out.'};
-        setStatus(map[err.code] || 'Location error.');
-        setBusy(false);
-      }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
-    });
-  }
 }
 
-function confirmEnd(){ if(confirm('End this door and go to next?')) go('dashboard'); }
+// removed RemovedNextDoor feature
+
+function confirmEnd(){ if(confirm('End this door and go to next?')) advanceGeo(); }
 function confirmVisit(outcome){
   const addr=(el('#k_addr')?.value||'').trim(); if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
   if(!confirm(`Log "${outcome}" at:\\n${addr}?`)) return; postVisit_geo(outcome);
 }
-// advanceGeo removed (no longer used)
+// removed RemovedNextDoor feature
 
-
-// Lead + photos
-function renderLead(){
-  el('#view').innerHTML = `<section class="card">${statsBarHTML()}<h2>New Lead</h2>
-    <div class="field"><label>Name*</label><input id="l_name" autocomplete="name"></div>
-    <div class="field"><label>Phone*</label><input id="l_phone" inputmode="tel" autocomplete="tel" placeholder="(###) ###-####"></div>
-    <div class="field"><label>Email</label><input id="l_email" inputmode="email" autocomplete="email"></div>
-    <div class="field"><label>Address</label><input id="l_addr" autocomplete="street-address" value="${S.geoList[S.geoPtr]?.addr||''}"></div>
-    <div class="field"><label>Service</label><select id="l_service"><option>Removal</option><option>Trim</option><option>Storm Prep</option><option>Planting</option><option>Other</option></select></div>
-    <div class="field"><label>Urgency</label><select id="l_urgency"><option>High</option><option>Medium</option><option>Low</option></select></div>
-    <div class="field"><label>Budget</label><select id="l_budget"><option>&lt;$500</option><option>$500+</option><option>$1k+</option></select></div>
-    <div class="field"><label>Notes</label><textarea id="l_notes" rows="4" enterkeyhint="done"></textarea></div>
-    <div class="field"><label>Photos (up to 3)</label><input id="l_photos" type="file" accept="image/*" multiple><div id="l_preview" class="btn-row" style="margin-top:.4rem"></div></div>
-    <div class="btn-row"><button class="primary" onclick="confirmLead()">Save Lead</button><button onclick="go('dashboard')">Cancel</button></div>
-  </section>`;
-  bindPhotoPreview();
-}
 function confirmLead(){
   const name=(el('#l_name')?.value||'').trim(); const addr=(el('#l_addr')?.value||'').trim();
   if(!name){ showToast('Name required','error'); return; }
@@ -271,7 +225,7 @@ function renderSettings(){
 function savePrefs(){ const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep; S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS(); showToast('Preferences saved ✓','success'); go('dashboard'); }
 async function testPost(){
   const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
-  const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'Test', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
+  const payload={ type:'visit', date:todayISO(), time:new Date().toISOString(), address:'TEST ADDRESS', notes:'(test payload)', outcome:'No Answer', rep:S.rep||'', source:'PWA', secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
   try{ const text=await sendToScript(payload); box.value='HTTP 200\\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); }
 }
 

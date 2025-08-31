@@ -46,22 +46,3 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pills{display:flex;gap:.5rem}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
-
-/* match-address additions */
-
-.addr-row{display:grid;grid-template-columns:1fr;gap:.5rem;align-items:center}
-
-.iconbtn.locate{border:1px solid #2a2a2a;background:#0b0b0b;padding:.7rem .9rem;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;transition:transform .08s ease}
-.iconbtn.locate:active{transform:scale(0.98)}
-.iconbtn.locate[disabled]{opacity:.6;cursor:not-allowed}
-.iconbtn.locate svg{margin-right:.5rem;vertical-align:middle}
-
-
-/* UX polish for Use My Location */
-.iconbtn.locate {
-  background: color-mix(in oklab, #000 88%, #fff 12%);
-  border-color: rgba(255,255,255,.08);
-}
-.iconbtn.locate:hover { filter: brightness(1.05); }
-.iconbtn.locate[aria-busy="true"] { opacity:.9 }
-.addr-row { margin-top:.5rem; }
