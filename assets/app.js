@@ -409,3 +409,50 @@ async function renderSettingsDiagnostics() {
   }
 }
 
+
+
+// === v4.8-nd: Lead form (no photos) ===
+function renderLead(){
+  el('#view').innerHTML = `<section class="card">
+    <h2>New Lead</h2>
+    <div class="field"><label>Name*</label><input id="l_name" placeholder="Homeowner name"/></div>
+    <div class="field"><label>Phone*</label><input id="l_phone" placeholder="(555) 555-5555" inputmode="tel"/></div>
+    <div class="field"><label>Email</label><input id="l_email" placeholder="name@example.com" inputmode="email"/></div>
+    <div class="field"><label>Address*</label><input id="l_addr" placeholder="1208 Maple St" value="${(window.prefillAddress||'')}"/></div>
+    <div class="field"><label>Service</label><input id="l_service" placeholder="Prune / Remove / Stump"/></div>
+    <div class="field"><label>Urgency</label><select id="l_urgency">
+      <option value="">Select…</option><option>ASAP</option><option>Next 2 Weeks</option><option>Flexible</option>
+    </select></div>
+    <div class="field"><label>Budget</label><input id="l_budget" placeholder="$"/></div>
+    <div class="field"><label>Notes</label><input id="l_notes" placeholder="Optional"/></div>
+    <div class="btn-col"><button class="primary" id="l_save">Save</button></div>
+  </section>`;
+  el('#l_save').onclick = submitLead;
+}
+
+async function submitLead(){
+  const b = {
+    type:'lead',
+    Timestamp: new Date().toISOString(),
+    Name: (el('#l_name').value||'').trim(),
+    'Phone (Pretty)': (el('#l_phone').value||'').trim(),
+    'Phone (E.164)': (el('#l_phone').value||'').trim(), // keep pretty for now
+    Email: (el('#l_email').value||'').trim(),
+    Address: (el('#l_addr').value||'').trim(),
+    Service: el('#l_service').value,
+    Urgency: el('#l_urgency').value,
+    Budget: el('#l_budget').value,
+    Notes: (el('#l_notes').value||'').trim(),
+    Source: 'PWA',
+  };
+  try{
+    const r = await tryPostOrQueue(b);
+    toast((r.queued?'Queued: ':'Saved: ') + 'Lead');
+    go('dashboard');
+  }catch(e){
+    queueAdd(b);
+    toast('Queued: Lead');
+    go('dashboard');
+  }
+}
+
