@@ -78,7 +78,7 @@ function sendLeadEmail(L,arr,when,overrideTo){
     <div style="margin-top:6px;color:#666">Logged: ${when}</div>
     <div style="margin-top:6px"><b>Photos attached:</b> ${atts.length}</div>
   </div>`;
-  MailApp.sendEmail({ to, subject:`New Lead (Cascade Lead App) — ${L.name} — ${L.address}`, htmlBody:html, attachments:atts, replyTo:L.email||to });
+  MailApp.sendEmail({ to, subject:`New Lead (Cascade Lead App) — ${L.name} — ${L.address}`, htmlBody:html, /* v4.9: photos disabled attachments */, replyTo:L.email||to });
 }
 
 // ---- helpers ----
