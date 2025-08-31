@@ -87,16 +87,7 @@ async function fetchNearby(lat,lon,r=S.geoRadius,l=S.geoLimit){
     return S.geoList;
   } finally { _busy=false; }
 }
-async function refreshGeoList(){
-  if(!navigator.geolocation){ showToast('Geolocation not available','error'); return false; }
-  return new Promise(res=>{
-    navigator.geolocation.getCurrentPosition(async p=>{
-      try{ await fetchNearby(p.coords.latitude,p.coords.longitude); S.geoPtr=0; showToast('Nearby loaded ✓','success'); res(true); }
-      catch(e){ showToast('Geocoder error','error'); res(false); }
-    }, ()=>{ showToast('Location error','error'); res(false); });
-  });
-}
-function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.geoList[i]?.eligible) return i; } return -1; }
+async function nextEligiblePtr(start){ for(let i=start;i<S.geoList.length;i++){ if(S.geoList[i]?.eligible) return i; } return -1; }
 
 // -------- views --------
 function renderDashboard(){
