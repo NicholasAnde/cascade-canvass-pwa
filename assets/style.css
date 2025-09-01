@@ -40,7 +40,7 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 
-/* === KPI grid === */
+/* KPI grid */
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:1rem .9rem;display:flex;flex-direction:column;justify-content:space-between;min-height:110px}
 .kpi .kpi-top{display:flex;align-items:center;gap:.5rem;color:#c7cbd1;font-size:.9rem}
