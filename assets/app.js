@@ -171,7 +171,7 @@ async function saveLead(){
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
 }
 
-/* Map: filters + type styling */
+/* Map: filters + type styling + safe re-init */
 function renderMap(){
   el('#view').innerHTML = `
     <section class="card">
@@ -200,12 +200,14 @@ function renderMap(){
     d30_89: '#ef4444', // red
     d90p:   '#9ca3af'  // gray
   };
+
+  // Age legend UI
   el('#legend').innerHTML = [
-    ['Today', COLORS.today],
-    ['1–7d', COLORS.d1_7],
-    ['8–29d', COLORS.d8_29],
+    ['Today',  COLORS.today],
+    ['1–7d',   COLORS.d1_7],
+    ['8–29d',  COLORS.d8_29],
     ['30–89d', COLORS.d30_89],
-    ['90+ d', COLORS.d90p]
+    ['90+ d',  COLORS.d90p]
   ].map(([label,color]) => `
     <span style="display:inline-flex;align-items:center;gap:.4rem">
       <span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #00000030"></span>
@@ -213,6 +215,7 @@ function renderMap(){
     </span>
   `).join('');
 
+  // Filter pills
   let mode = 'both';
   el('#typePills').querySelectorAll('.pill').forEach(p=>{
     p.addEventListener('click',()=>{
@@ -223,65 +226,74 @@ function renderMap(){
     });
   });
 
-  // latest per address for visits/leads separately
+  // Helpers
   function latestByAddress(arr){
     const idx={};
     for(const v of (arr||[])){
       const a=(v.address||'').trim(); if(!a) continue;
-      const t=v.time||v.date||''; if(!idx[a] || new Date(t)>new Date(idx[a].time||idx[a].date||0)) idx[a]=v;
+      const t=v.time||v.date||'';
+      if(!idx[a] || new Date(t)>new Date(idx[a].time||idx[a].date||0)) idx[a]=v;
     }
     return Object.values(idx);
   }
-
   function collectPoints(){
-    const v = latestByAddress(S.visitsLog).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
-                  .map(o=>({...o, __type:'visit'}));
-    const l = latestByAddress(S.leadsLog ).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
-                  .map(o=>({...o, __type:'lead'}));
-    if(mode==='visits') return v;
-    if(mode==='leads')  return l;
-    return [...v,...l];
+    const visits = latestByAddress(S.visitsLog).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
+                      .map(o=>({...o,__type:'visit'}));
+    const leads  = latestByAddress(S.leadsLog ).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
+                      .map(o=>({...o,__type:'lead'}));
+    if(mode==='visits') return visits;
+    if(mode==='leads')  return leads;
+    return [...visits, ...leads];
   }
-
   function ageColor(iso){
-    const daysSince = x => Math.floor((Date.now()-new Date(x).getTime())/86400000);
-    const lastIso = (iso||'').slice(0,10);
-    const age = lastIso ? daysSince(lastIso) : 9999;
-    if (age===0)      return COLORS.today;
-    if (age<=7)       return COLORS.d1_7;
-    if (age>=90)      return COLORS.d90p;
-    if (age>=30)      return COLORS.d30_89;
+    const last = (iso||'').slice(0,10);
+    const days = last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : 9999;
+    if(days===0)      return COLORS.today;
+    if(days<=7)       return COLORS.d1_7;
+    if(days>=90)      return COLORS.d90p;
+    if(days>=30)      return COLORS.d30_89;
     return COLORS.d8_29;
   }
-
   function iconHTML(color, type){
-    // visit = solid, lead = ring (hollow)
-    if (type==='lead') {
+    // visit = solid, lead = ring
+    if(type==='lead'){
       return `<div style="width:16px;height:16px;border-radius:50%;
-                          box-sizing:border-box; background:transparent;
+                          box-sizing:border-box;background:transparent;
                           border:3px solid ${color};"></div>`;
     }
-    // visit
     return `<div style="width:16px;height:16px;border-radius:50%;
-                        border:2px solid #00000080; background:${color};"></div>`;
+                        border:2px solid #00000080;background:${color};"></div>`;
   }
 
   function draw(){
     if(!window.L){ showToast('Map library not loaded','error'); return; }
+
+    // 💡 Re-init safely: destroy any existing map in this container
+    if (window.__map) {
+      try { window.__map.remove(); } catch(_) {}
+      window.__map = null;
+    }
+
     el('#map').innerHTML='';
     const pts = collectPoints();
-    const map = L.map('map', {zoomControl:true});
+
+    const map = L.map('map', { zoomControl:true });
+    window.__map = map;
+
     const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
-    map.setView(start, pts[0]?15:12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+    map.setView(start, pts[0] ? 15 : 12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    }).addTo(map);
 
     const bounds=[];
     for(const p of pts){
       const color = ageColor(p.time || p.date || '');
-      const icon = new L.DivIcon({ className:'', html: iconHTML(color, p.__type) });
-      const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
-      const title=p.address||'';
-      const subtitle = `${(p.outcome||p.__type==='lead'?'Lead':'Visit')} • ${new Date(p.time||p.date||'').toLocaleString()}`;
+      const icon  = new L.DivIcon({ className:'', html: iconHTML(color, p.__type) });
+      const m = L.marker([p.lat,p.lon], { icon }).addTo(map);
+      const title    = p.address || '';
+      const subtitle = `${(p.outcome || (p.__type==='lead'?'Lead':'Visit'))} • ${new Date(p.time||p.date||'').toLocaleString()}`;
       m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
       bounds.push([p.lat,p.lon]);
     }
