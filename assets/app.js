@@ -171,8 +171,8 @@ async function saveLead(){
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
 }
 
-/* Map: filters + type styling + safe re-init */
-function renderMap(){
+/* Map: pulls visits from Sheet + local logs; filters; safe re-init */
+async function renderMap(){
   el('#view').innerHTML = `
     <section class="card">
       <h2>Map — Knock History</h2>
@@ -193,40 +193,27 @@ function renderMap(){
     </section>
   `;
 
-  const COLORS = {
-    today:  '#22c55e', // green
-    d1_7:   '#3b82f6', // blue
-    d8_29:  '#f59e0b', // amber
-    d30_89: '#ef4444', // red
-    d90p:   '#9ca3af'  // gray
-  };
-
-  // Age legend UI
+  const COLORS = { today:'#22c55e', d1_7:'#3b82f6', d8_29:'#f59e0b', d30_89:'#ef4444', d90p:'#9ca3af' };
   el('#legend').innerHTML = [
-    ['Today',  COLORS.today],
-    ['1–7d',   COLORS.d1_7],
-    ['8–29d',  COLORS.d8_29],
-    ['30–89d', COLORS.d30_89],
-    ['90+ d',  COLORS.d90p]
-  ].map(([label,color]) => `
-    <span style="display:inline-flex;align-items:center;gap:.4rem">
-      <span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #00000030"></span>
-      <small>${label}</small>
-    </span>
-  `).join('');
+    ['Today',COLORS.today],['1–7d',COLORS.d1_7],['8–29d',COLORS.d8_29],['30–89d',COLORS.d30_89],['90+ d',COLORS.d90p]
+  ].map(([label,color])=>`<span style="display:inline-flex;align-items:center;gap:.4rem"><span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #00000030"></span><small>${label}</small></span>`).join('');
 
-  // Filter pills
-  let mode = 'both';
+  let mode='both';
   el('#typePills').querySelectorAll('.pill').forEach(p=>{
-    p.addEventListener('click',()=>{
-      el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
-      p.classList.add('active');
-      mode = p.getAttribute('data-mode');
-      draw();
-    });
+    p.addEventListener('click',()=>{ el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active')); p.classList.add('active'); mode=p.getAttribute('data-mode'); draw(); });
   });
 
-  // Helpers
+  // Pull from server
+  async function fetchServer(){
+    if(!S.endpoint) return {visits:[],leads:[]};
+    try{
+      const url=S.endpoint+'?read=1&secret='+encodeURIComponent(S.secret||'');
+      const j=await fetch(url,{method:'GET'}).then(r=>r.json());
+      if(j && j.visits && j.leads) return j;
+    }catch(_){}
+    return {visits:[],leads:[]};
+  }
+
   function latestByAddress(arr){
     const idx={};
     for(const v of (arr||[])){
@@ -236,64 +223,78 @@ function renderMap(){
     }
     return Object.values(idx);
   }
-  function collectPoints(){
-    const visits = latestByAddress(S.visitsLog).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
-                      .map(o=>({...o,__type:'visit'}));
-    const leads  = latestByAddress(S.leadsLog ).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
-                      .map(o=>({...o,__type:'lead'}));
-    if(mode==='visits') return visits;
-    if(mode==='leads')  return leads;
-    return [...visits, ...leads];
-  }
   function ageColor(iso){
-    const last = (iso||'').slice(0,10);
-    const days = last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : 9999;
-    if(days===0)      return COLORS.today;
-    if(days<=7)       return COLORS.d1_7;
-    if(days>=90)      return COLORS.d90p;
-    if(days>=30)      return COLORS.d30_89;
+    const last=(iso||'').slice(0,10);
+    const days= last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : 9999;
+    if(days===0) return COLORS.today;
+    if(days<=7)  return COLORS.d1_7;
+    if(days>=90) return COLORS.d90p;
+    if(days>=30) return COLORS.d30_89;
     return COLORS.d8_29;
   }
-  function iconHTML(color, type){
-    // visit = solid, lead = ring
-    if(type==='lead'){
-      return `<div style="width:16px;height:16px;border-radius:50%;
-                          box-sizing:border-box;background:transparent;
-                          border:3px solid ${color};"></div>`;
-    }
-    return `<div style="width:16px;height:16px;border-radius:50%;
-                        border:2px solid #00000080;background:${color};"></div>`;
+  const iconHTML=(color,type)=> type==='lead'
+    ? `<div style="width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:transparent;border:3px solid ${color};"></div>`
+    : `<div style="width:16px;height:16px;border-radius:50%;border:2px solid #00000080;background:${color};"></div>`;
+
+  // Merge: server + local (server already contains mirrored "Lead" visits)
+  const server = await fetchServer();
+
+  // Normalize server rows (make sure lat/lon are numbers)
+  const norm = r => {
+    const o = {...r};
+    o.lat = (typeof o.Lat==='number') ? o.Lat : (typeof o.lat==='number'?o.lat:null);
+    o.lon = (typeof o.Lon==='number') ? o.Lon : (typeof o.lon==='number'?o.lon:null);
+    o.date = o['Visit Date'] || o['Lead Date'] || o.date || '';
+    o.time = o['Visit Time'] || o['Lead Time'] || o.time || '';
+    o.address = o.Address || o.address || '';
+    o.outcome = o.Outcome || o.outcome || '';
+    return o;
+  };
+
+  const serverVisits = (server.visits||[]).map(norm);
+  const localVisits  = (S.visitsLog||[]).map(norm);
+  const allVisits = [...serverVisits, ...localVisits];
+
+  // For leads we may still want to include server leads that have lat/lon (belt & suspenders)
+  const serverLeads  = (server.leads||[]).map(r => {
+    const o = norm(r); o.outcome = 'Lead'; return o;
+  }).filter(o => typeof o.lat==='number' && typeof o.lon==='number');
+
+  const combinedVisits = latestByAddress(allVisits.filter(o => typeof o.lat==='number' && typeof o.lon==='number'));
+  const combinedLeads  = latestByAddress(serverLeads.concat((S.leadsLog||[]).map(norm).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')));
+
+  function collectPoints(){
+    const v = combinedVisits.map(o=>({ ...o, __type:'visit' }));
+    const l = combinedLeads .map(o=>({ ...o, __type:'lead'  }));
+    if(mode==='visits') return v;
+    if(mode==='leads')  return l;
+    return [...v, ...l];
   }
 
   function draw(){
     if(!window.L){ showToast('Map library not loaded','error'); return; }
-
-    // 💡 Re-init safely: destroy any existing map in this container
-    if (window.__map) {
-      try { window.__map.remove(); } catch(_) {}
-      window.__map = null;
-    }
-
+    // Re-init safely
+    if(window.__map){ try{ window.__map.remove(); }catch(_){} window.__map=null; }
     el('#map').innerHTML='';
-    const pts = collectPoints();
 
-    const map = L.map('map', { zoomControl:true });
-    window.__map = map;
+    const pts = collectPoints();
+    const map = L.map('map', {zoomControl:true}); window.__map = map;
 
     const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
-    map.setView(start, pts[0] ? 15 : 12);
+    map.setView(start, pts[0]?15:12);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap'
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19, attribution:'© OpenStreetMap'
     }).addTo(map);
 
     const bounds=[];
     for(const p of pts){
       const color = ageColor(p.time || p.date || '');
       const icon  = new L.DivIcon({ className:'', html: iconHTML(color, p.__type) });
-      const m = L.marker([p.lat,p.lon], { icon }).addTo(map);
-      const title    = p.address || '';
-      const subtitle = `${(p.outcome || (p.__type==='lead'?'Lead':'Visit'))} • ${new Date(p.time||p.date||'').toLocaleString()}`;
+      const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
+      const title=p.address||'';
+      const subtype = p.__type==='lead' ? 'Lead' : (p.outcome || 'Visit');
+      const subtitle = `${subtype} • ${new Date(p.time||p.date||'').toLocaleString()}`;
       m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
       bounds.push([p.lat,p.lon]);
     }
