@@ -1,10 +1,5 @@
-// v4.7.2-patch-007
-// - Always capture GPS on knock; manual reverse lookup optional
-// - Next Door: Lead / Left Literature / Declined / Skip (no photos)
-// - Sheets read+write; GET read for Pull from Sheets
-// - Map: filters (Visits / Leads / Both), type styling (visit=solid, lead=ring), age colors
-// - Map auto-refreshes after any visit/lead is saved via a "knock:logged" event
-// - Safe Leaflet re-init on tab re-entry
+// v4.7.2-patch-009 — Dashboard KPI tracker (per-rep), always-capture GPS, manual reverse lookup,
+// read/write Sheets, Map filters & auto-refresh, safe Leaflet re-init.
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -17,6 +12,8 @@ window.S = window.S || {
   __prefill: null
 };
 document.documentElement.dataset.theme = (S.theme === 'light') ? 'light' : '';
+
+const LEAD_GOAL = 15;
 
 (async function(){
   try{
@@ -49,7 +46,59 @@ async function sendToScript(payload){
   return r.text();
 }
 
-/* Router */
+/* ===== Date helpers ===== */
+const d0 = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const today = () => d0(new Date());
+const iso = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString();
+function startOfWeek(d, weekStartsOn=1){ const t=d0(d); const wd=t.getDay(); const diff=(wd>=weekStartsOn)? wd-weekStartsOn : 7-(weekStartsOn-wd); return new Date(t.getFullYear(),t.getMonth(),t.getDate()-diff); }
+function isSameWeek(a,b){ const sa=startOfWeek(a), sb=startOfWeek(b); return sa.getFullYear()===sb.getFullYear() && sa.getMonth()===sb.getMonth() && sa.getDate()===sb.getDate(); }
+
+/* ===== KPI (per-rep) ===== */
+function repEquals(x){ return String(x||'').trim().toLowerCase() === String(S.rep||'').trim().toLowerCase(); }
+function uniqueByDateAddress(items){
+  const set=new Set(), out=[];
+  for(const it of items){
+    if(!repEquals(it.rep)) continue;
+    const day=(it.date || (it.time||'').slice(0,10) || '').slice(0,10);
+    const addr=(it.address||'').trim();
+    if(!day || !addr) continue;
+    const key=day+'|'+addr;
+    if(!set.has(key)){ set.add(key); out.push({day,addr}); }
+  }
+  return out;
+}
+function computeKpis(){
+  const tISO = iso(today()).slice(0,10);
+
+  const doorsToday = uniqueByDateAddress((S.visitsLog||[]).filter(v => repEquals(v.rep) && (v.date||'').slice(0,10)===tISO)).length;
+  const leadsToday = (S.leadsLog||[]).filter(l => repEquals(l.rep) && (l.date||'').slice(0,10)===tISO).length;
+
+  const weekLeads = (S.leadsLog||[]).filter(l => {
+    if(!repEquals(l.rep)) return false;
+    const d = new Date(l.date || l.time || 0);
+    return isSameWeek(d, new Date());
+  }).length;
+
+  // streak: consecutive past weeks with goal met for THIS rep
+  const countsByWeek = new Map();
+  for(const l of (S.leadsLog||[])){
+    if(!repEquals(l.rep)) continue;
+    const d = new Date(l.date || l.time || 0);
+    const wk = startOfWeek(d).toISOString().slice(0,10);
+    countsByWeek.set(wk, (countsByWeek.get(wk)||0) + 1);
+  }
+  let streak=0; let cursor = startOfWeek(new Date());
+  for(let i=0;i<52;i++){
+    const wkKey = cursor.toISOString().slice(0,10);
+    if((countsByWeek.get(wkKey)||0) >= LEAD_GOAL) streak++;
+    else break;
+    cursor = new Date(cursor.getFullYear(),cursor.getMonth(),cursor.getDate()-7);
+  }
+
+  return { doorsToday, leadsToday, weekLeads, streak, goal: LEAD_GOAL };
+}
+
+/* ===== Router ===== */
 function go(tab){
   if(tab==='dashboard') return renderDashboard();
   if(tab==='knock')     return renderKnock();
@@ -62,21 +111,61 @@ function go(tab){
 }
 window.go = go;
 
-/* Dashboard */
+/* ===== Dashboard + KPIs (per-rep) ===== */
 function renderDashboard(){
-  el('#view').innerHTML = `<section class="card"><h2>Home</h2>
-    <div class="btn-row">
-      <button class="primary" onclick="go('knock')">Next Door</button>
-      <button onclick="go('map')">Map</button>
-      <button onclick="go('lead')">New Lead</button>
-      <button onclick="go('tracker')">Lead Tracker</button>
-      <button onclick="go('scripts')">Scripts</button>
-      <button onclick="go('settings')">Settings</button>
-    </div>
-  </section>`;
+  const k = computeKpis();
+  const needRep = !String(S.rep||'').trim();
+
+  el('#view').innerHTML = `
+    ${needRep ? `<section class="card"><div class="field" style="border-left:4px solid #f59e0b"><label>Heads up</label><div>Set your <b>Rep Name</b> in <a href="#" onclick="go('settings')">Settings</a> to see your personal KPIs.</div></div></section>` : ''}
+
+    <section class="card">
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-top">📅 Today</div>
+          <div class="kpi-value">${k.doorsToday}</div>
+          <div class="kpi-sub">Doors knocked (${S.rep||'—'})</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top">📊 This Week</div>
+          <div class="kpi-value">${k.weekLeads} / ${k.goal}</div>
+          <div class="kpi-sub">Leads toward goal (${S.rep||'—'})</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top">🔥 Streak</div>
+          <div class="kpi-value">${k.streak} wks</div>
+          <div class="kpi-sub">Weeks ≥ ${k.goal} leads</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Home</h2>
+      <div class="btn-row">
+        <button class="primary" onclick="go('knock')">Next Door</button>
+        <button onclick="go('map')">Map</button>
+        <button onclick="go('lead')">New Lead</button>
+        <button onclick="go('tracker')">Lead Tracker</button>
+        <button onclick="go('scripts')">Scripts</button>
+        <button onclick="go('settings')">Settings</button>
+      </div>
+    </section>
+  `;
+
+  // Live updates when something is logged or pulled from Sheets
+  if(!window.__dashKpiListener){
+    window.__dashKpiListener = ()=>{
+      const k2 = computeKpis();
+      const root = el('.kpis'); if(!root) return;
+      root.querySelectorAll('.kpi .kpi-value')[0].textContent = k2.doorsToday;
+      root.querySelectorAll('.kpi .kpi-value')[1].textContent = `${k2.weekLeads} / ${k2.goal}`;
+      root.querySelectorAll('.kpi .kpi-value')[2].textContent = `${k2.streak} wks`;
+    };
+    window.addEventListener('knock:logged', window.__dashKpiListener);
+  }
 }
 
-/* Next Door (manual reverse lookup; always capture GPS on save) */
+/* ===== Next Door (manual reverse lookup; always capture GPS on save) ===== */
 function renderKnock(){
   el('#view').innerHTML = `<section class="card"><h2>Next Door</h2>
     <div class="field"><label>Address*</label><input id="k_addr" placeholder="1208 Maple St" autocomplete="street-address"></div>
@@ -106,14 +195,11 @@ async function reverseLookup(){
     }
   }, ()=> showToast('Location error','error'));
 }
-
-/* --- ALWAYS capture GPS; emit 'knock:logged' so Map can auto-refresh --- */
 async function knockOutcome(outcome){
   const addr=(el('#k_addr')?.value||'').trim();
   const notes=(el('#k_notes')?.value||'').trim();
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
 
-  // Silent GPS
   let lat=null, lon=null;
   if(navigator.geolocation){
     try{
@@ -121,7 +207,6 @@ async function knockOutcome(outcome){
       lat = pos.coords.latitude; lon = pos.coords.longitude;
     }catch(_){}
   }
-  // Prefer coords from manual lookup if present
   if(S.__lastGPS){ lat=S.__lastGPS.lat; lon=S.__lastGPS.lon; S.__lastGPS=null; }
 
   const item={ type: outcome==='Lead'?'lead':'visit',
@@ -133,17 +218,14 @@ async function knockOutcome(outcome){
   try{ await sendToScript({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
 
-  S.visitsLog.push(item); saveLS();
-  showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success');
-
-  // 🔔 Notify the Map to refresh
+  S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success');
   window.dispatchEvent(new CustomEvent('knock:logged', { detail: item }));
 
   if(outcome==='Lead'){ S.__prefill={ address:addr, lat, lon }; go('lead'); }
   else { el('#k_addr').value=''; el('#k_notes').value=''; }
 }
 
-/* Lead (no photos) — includes GPS and notifies the map */
+/* ===== Lead (no photos) ===== */
 function renderLead(){
   const pf=S.__prefill||{}; delete S.__prefill;
   el('#view').innerHTML = `<section class="card"><h2>New Lead</h2>
@@ -167,7 +249,6 @@ async function saveLead(){
 
   if(!b.name){ showToast('Name required','error'); return; }
 
-  // Prefer coords carried from Next Door if present, else try GPS now
   if(S.__prefill && typeof S.__prefill.lat==='number' && typeof S.__prefill.lon==='number'){
     b.lat = S.__prefill.lat; b.lon = S.__prefill.lon; S.__prefill = null;
   }else if(navigator.geolocation){
@@ -180,111 +261,12 @@ async function saveLead(){
   try{ await sendToScript({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
 
-  S.leadsLog.push(b); saveLS();
-  showToast('Lead saved ✓','success');
-
-  // 🔔 Notify the Map to refresh (the backend also mirrors Lead into Visits)
+  S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success');
   window.dispatchEvent(new CustomEvent('knock:logged', { detail: b }));
-
   go('dashboard');
 }
 
-/* Lead tracker (local) */
-function renderTracker(){
-  el('#view').innerHTML = `<section class="card"><h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
-  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const list=S.leadsLog||[];
-  el('#lt_list').innerHTML = list.map((l,i)=>`<div class="field" style="padding:.6rem .8rem">
-    <label>${esc(l.date||'')} — ${esc(l.name||'')}</label>
-    <div><small>${esc(l.address||'')}</small></div>
-    <div class="btn-row" style="margin-top:.35rem"><button data-del="${i}">❌ Delete</button></div>
-  </div>`).join('') || '<div class="field"><label>No leads yet</label></div>';
-  el('#lt_list').querySelectorAll('button[data-del]').forEach(btn=>btn.addEventListener('click',()=>{
-    const idx=parseInt(btn.getAttribute('data-del'),10); const lead=(S.leadsLog||[])[idx]; if(!lead) return;
-    if(!confirm('Delete lead '+(lead.name||'')+'?')) return;
-    const ix=(S.leadsLog||[]).indexOf(lead); if(ix>=0){ S.leadsLog.splice(ix,1); saveLS(); showToast('Lead deleted (local) ✓','success'); renderTracker(); }
-  }));
-}
-
-/* Scripts */
-async function renderScripts(){
-  const SCRIPT_URL='assets/scripts.json?v=4727';
-  let data=null; try{ data=await fetch(SCRIPT_URL,{cache:'no-store'}).then(r=>r.json()); }catch(_){ data=null; }
-  data=data||{seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
-  const m=new Date().getMonth()+1; const season=(m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
-  const audiences=Object.keys(data.audience||{}), rebuttals=data.rebuttals||{};
-  el('#view').innerHTML=`<section class="card">
-    <h2>Scripts</h2>
-    <div class="field"><label>Season</label><input value="${season}" readonly/></div>
-    <div class="field"><label>Audience Cue</label><select id="sc_aud">${audiences.map(a=>`<option>${a}</option>`).join('')}</select></div>
-    <div class="field"><label>Opener</label><textarea rows="2" readonly>${data.core.opener||''}</textarea></div>
-    <div class="field"><label>Ask</label><textarea rows="2" readonly>${data.core.ask||''}</textarea></div>
-    <div class="field"><label>Close</label><textarea rows="2" readonly>${data.core.close||''}</textarea></div>
-    <div class="field"><label>Notes (Season + Audience)</label><textarea id="sc_preview" rows="3" readonly></textarea></div>
-    <div class="field"><label>Rebuttals</label><div id="rbx"></div></div>
-  </section>`;
-  const updateNotes=()=>{ const a=(el('#sc_aud')?.value||''); const sHook=(data.seasons?.[season]||''); const aCue=(data.audience?.[a]||''); el('#sc_preview').value=[sHook,aCue].filter(Boolean).join(' • '); };
-  el('#sc_aud')?.addEventListener('change',updateNotes); updateNotes();
-  el('#rbx').innerHTML = Object.keys(rebuttals).map(k=>{ const rb=rebuttals[k]||{}; return `<div class="field" style="margin-top:.4rem"><label>${k}</label><div><small><b>A)</b> ${rb.A||''}</small></div><div style="margin-top:.2rem"><small><b>B)</b> ${rb.B||''}</small></div></div>`; }).join('') || '<small>No rebuttals</small>';
-}
-
-/* Settings (read + write) */
-function renderSettings(){
-  el('#view').innerHTML = `<section class="card"><h2>Settings</h2>
-    <div class="field"><label>Rep Name</label><input id="s_rep" value="${S.rep||''}" autocomplete="name"></div>
-    <div class="field"><label>Theme</label><select id="s_theme"><option value="dark" ${S.theme==='dark'?'selected':''}>Dark</option><option value="light" ${S.theme==='light'?'selected':''}>Light (iOS)</option></select></div>
-    <div class="btn-row">
-      <button class="primary" onclick="savePrefs()">Save</button>
-      <button onclick="retryQueue()">Retry Queue (${S.queue.length})</button>
-      <button onclick="clearQueue()">Clear Queue</button>
-      <button onclick="testPost()">Test POST</button>
-      <button onclick="pullFromSheets()">Pull from Sheets</button>
-    </div>
-    <div class="field"><label>Test / Sync Result</label><textarea id="adm_msg" rows="3" readonly placeholder="Results appear here"></textarea></div>
-  </section>`;
-}
-function savePrefs(){
-  const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep;
-  S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS();
-  showToast('Preferences saved ✓','success'); go('dashboard');
-}
-async function testPost(){
-  const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
-  const payload={ type:'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
-    address:'TEST ADDRESS', notes:'(test payload)', outcome:'Left Literature', rep:S.rep||'', source:'PWA',
-    secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
-  try{ const text=await sendToScript(payload); box.value='HTTP 200\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); }
-}
-async function pullFromSheets(){
-  const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
-  try{
-    const url=S.endpoint+'?read=1&secret='+encodeURIComponent(S.secret||'');
-    const j=await fetch(url,{method:'GET'}).then(r=>r.json());
-    if(j && Array.isArray(j.visits) && Array.isArray(j.leads)){
-      j.visits.forEach(v=> S.visitsLog.push(v));
-      j.leads.forEach(l=>  S.leadsLog.push(l));
-      saveLS(); showToast('Pulled from Sheets ✓'); box.value='Pulled '+j.visits.length+' visits & '+j.leads.length+' leads';
-      // 🔔 If map is open, refresh it too
-      window.dispatchEvent(new Event('knock:logged'));
-    }else{ box.value='Unexpected response'; showToast('Pull failed','error'); }
-  }catch(e){ box.value=String(e); showToast('Pull failed','error'); }
-}
-
-/* Queue helpers */
-async function retryQueue(){
-  if(!S.queue.length){ showToast('Queue empty','info'); return; }
-  const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last='';
-  for(const p of q){ try{ await sendToScript(p); sent++; }catch(e){ S.queue.push(p); failed++; last=String(e); } }
-  saveLS(); if(sent) showToast(`Synced ${sent} ✓`,'success');
-  if(failed) showToast(`${failed} still queued${last? ' ('+last+')':''}`,'info');
-}
-function clearQueue(){
-  if(!S.queue.length){ showToast('Queue already empty','info'); return; }
-  if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return;
-  S.queue=[]; saveLS(); showToast('Queue cleared ✓','success');
-}
-
-/* ===================== MAP (with auto-refresh) ===================== */
+/* ===== Map (filters + auto-refresh + safe re-init) ===== */
 async function renderMap(){
   el('#view').innerHTML = `
     <section class="card">
@@ -312,20 +294,16 @@ async function renderMap(){
   ].map(([label,color])=>`<span style="display:inline-flex;align-items:center;gap:.4rem"><span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #00000030"></span><small>${label}</small></span>`).join('');
 
   let mode='both';
-
   el('#typePills').querySelectorAll('.pill').forEach(p=>{
-    p.addEventListener('click',()=>{
-      el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
-      p.classList.add('active');
-      mode=p.getAttribute('data-mode');
-      controller.draw();
-    });
+    p.addEventListener('click',()=>{ el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active')); p.classList.add('active'); mode=p.getAttribute('data-mode'); controller.draw(); });
   });
 
-  // ---- Data helpers ----
+  function repEquals(x){ return String(x||'').trim().toLowerCase() === String(S.rep||'').trim().toLowerCase(); }
+
   function latestByAddress(arr){
     const idx={};
     for(const v of (arr||[])){
+      if(!repEquals(v.rep)) continue;
       const a=(v.address||'').trim(); if(!a) continue;
       const t=v.time||v.date||'';
       if(!idx[a] || new Date(t)>new Date(idx[a].time||idx[a].date||0)) idx[a]=v;
@@ -362,19 +340,20 @@ async function renderMap(){
     o.time = o['Visit Time'] || o['Lead Time'] || o.time || '';
     o.address = o.Address || o.address || '';
     o.outcome = o.Outcome || o.outcome || '';
+    o.rep = o.Rep || o.rep || '';
     return o;
   };
 
   async function rebuildData(){
     const server = await fetchServer();
-    const serverVisits = (server.visits||[]).map(norm);
-    const localVisits  = (S.visitsLog||[]).map(norm);
+    const serverVisits = (server.visits||[]).map(norm).filter(x=>repEquals(x.rep));
+    const localVisits  = (S.visitsLog||[]).map(norm).filter(x=>repEquals(x.rep));
     const allVisits    = [...serverVisits, ...localVisits];
 
     const serverLeads  = (server.leads||[]).map(r=>{ const o=norm(r); o.outcome='Lead'; return o; })
-                            .filter(o=>typeof o.lat==='number' && typeof o.lon==='number');
+                             .filter(o=>repEquals(o.rep) && typeof o.lat==='number' && typeof o.lon==='number');
     const combinedVisits = latestByAddress(allVisits.filter(o=>typeof o.lat==='number' && typeof o.lon==='number'));
-    const combinedLeads  = latestByAddress(serverLeads.concat((S.leadsLog||[]).map(norm).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')));
+    const combinedLeads  = latestByAddress(serverLeads.concat((S.leadsLog||[]).map(norm).filter(o=>repEquals(o.rep)&&typeof o.lat==='number'&&typeof o.lon==='number')));
 
     controller._visits = combinedVisits;
     controller._leads  = combinedLeads;
@@ -390,7 +369,6 @@ async function renderMap(){
 
   function draw(){
     if(!window.L){ showToast('Map library not loaded','error'); return; }
-    // Safe re-init
     if(window.__map){ try{ window.__map.remove(); }catch(_){ } window.__map=null; }
     el('#map').innerHTML='';
 
@@ -400,9 +378,7 @@ async function renderMap(){
     const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
     map.setView(start, pts[0]?15:12);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      maxZoom:19, attribution:'© OpenStreetMap'
-    }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 
     const bounds=[];
     for(const p of pts){
@@ -418,23 +394,111 @@ async function renderMap(){
     if(bounds.length>1) map.fitBounds(bounds,{padding:[20,20]});
   }
 
-  // Controller exposes methods so we can refresh from events
-  const controller = {
-    _visits: [], _leads: [],
-    async rebuild(){ await rebuildData(); },
-    draw
-  };
+  const controller = { _visits:[], _leads:[], async rebuild(){ await rebuildData(); }, draw };
   window.__mapController = controller;
 
-  // Listen once for "knock:logged" to refresh the map when new doors/leads are added
   if(!window.__mapKnockListener){
-    window.__mapKnockListener = async ()=>{ 
-      if(window.__mapController){ await window.__mapController.rebuild(); window.__mapController.draw(); }
-    };
+    window.__mapKnockListener = async ()=>{ if(window.__mapController){ await window.__mapController.rebuild(); window.__mapController.draw(); } };
     window.addEventListener('knock:logged', window.__mapKnockListener);
   }
 
-  // Initial build
   await controller.rebuild();
   controller.draw();
 }
+
+/* ===== Lead tracker ===== */
+function renderTracker(){
+  el('#view').innerHTML = `<section class="card"><h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
+  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const list=(S.leadsLog||[]).filter(x=>repEquals(x.rep));
+  el('#lt_list').innerHTML = list.map((l,i)=>`<div class="field" style="padding:.6rem .8rem">
+    <label>${esc(l.date||'')} — ${esc(l.name||'')}</label>
+    <div><small>${esc(l.address||'')}</small></div>
+    <div class="btn-row" style="margin-top:.35rem"><button data-del="${i}">❌ Delete</button></div>
+  </div>`).join('') || '<div class="field"><label>No leads yet</label></div>';
+  el('#lt_list').querySelectorAll('button[data-del]').forEach(btn=>btn.addEventListener('click',()=>{
+    const idx=parseInt(btn.getAttribute('data-del'),10); const lead=list[idx]; if(!lead) return;
+    if(!confirm('Delete lead '+(lead.name||'')+'?')) return;
+    const ix=(S.leadsLog||[]).indexOf(lead); if(ix>=0){ S.leadsLog.splice(ix,1); saveLS(); showToast('Lead deleted (local) ✓','success'); renderTracker(); }
+  }));
+}
+
+/* ===== Scripts ===== */
+async function renderScripts(){
+  const SCRIPT_URL='assets/scripts.json?v=4729';
+  let data=null; try{ data=await fetch(SCRIPT_URL,{cache:'no-store'}).then(r=>r.json()); }catch(_){ data=null; }
+  data=data||{seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
+  const m=new Date().getMonth()+1; const season=(m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
+  const audiences=Object.keys(data.audience||{}), rebuttals=data.rebuttals||{};
+  el('#view').innerHTML=`<section class="card">
+    <h2>Scripts</h2>
+    <div class="field"><label>Season</label><input value="${season}" readonly/></div>
+    <div class="field"><label>Audience Cue</label><select id="sc_aud">${audiences.map(a=>`<option>${a}</option>`).join('')}</select></div>
+    <div class="field"><label>Opener</label><textarea rows="2" readonly>${data.core.opener||''}</textarea></div>
+    <div class="field"><label>Ask</label><textarea rows="2" readonly>${data.core.ask||''}</textarea></div>
+    <div class="field"><label>Close</label><textarea rows="2" readonly>${data.core.close||''}</textarea></div>
+    <div class="field"><label>Notes (Season + Audience)</label><textarea id="sc_preview" rows="3" readonly></textarea></div>
+    <div class="field"><label>Rebuttals</label><div id="rbx"></div></div>
+  </section>`;
+  const updateNotes=()=>{ const a=(el('#sc_aud')?.value||''); const sHook=(data.seasons?.[season]||''); const aCue=(data.audience?.[a]||''); el('#sc_preview').value=[sHook,aCue].filter(Boolean).join(' • '); };
+  el('#sc_aud')?.addEventListener('change',updateNotes); updateNotes();
+  el('#rbx').innerHTML = Object.keys(rebuttals).map(k=>{ const rb=rebuttals[k]||{}; return `<div class="field" style="margin-top:.4rem"><label>${k}</label><div><small><b>A)</b> ${rb.A||''}</small></div><div style="margin-top:.2rem"><small><b>B)</b> ${rb.B||''}</small></div></div>`; }).join('') || '<small>No rebuttals</small>';
+}
+
+/* ===== Settings (read + write) ===== */
+function renderSettings(){
+  el('#view').innerHTML = `<section class="card"><h2>Settings</h2>
+    <div class="field"><label>Rep Name</label><input id="s_rep" value="${S.rep||''}" autocomplete="name"></div>
+    <div class="field"><label>Theme</label><select id="s_theme"><option value="dark" ${S.theme==='dark'?'selected':''}>Dark</option><option value="light" ${S.theme==='light'?'selected':''}>Light (iOS)</option></select></div>
+    <div class="btn-row">
+      <button class="primary" onclick="savePrefs()">Save</button>
+      <button onclick="retryQueue()">Retry Queue (${S.queue.length})</button>
+      <button onclick="clearQueue()">Clear Queue</button>
+      <button onclick="testPost()">Test POST</button>
+      <button onclick="pullFromSheets()">Pull from Sheets</button>
+    </div>
+    <div class="field"><label>Test / Sync Result</label><textarea id="adm_msg" rows="3" readonly placeholder="Results appear here"></textarea></div>
+  </section>`;
+}
+function savePrefs(){
+  const rep=(el('#s_rep').value||'').trim(); if(rep) S.rep=rep;
+  S.theme=el('#s_theme').value; document.documentElement.dataset.theme=(S.theme==='light')?'light':''; saveLS();
+  showToast('Preferences saved ✓','success'); go('dashboard');
+}
+async function testPost(){
+  const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
+  const payload={ type:'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
+    address:'TEST ADDRESS', notes:'(test payload)', outcome:'Left Literature', rep:S.rep||'', source:'PWA',
+    secret:S.secret||'', emailNotifyTo:S.emailNotifyTo||'' };
+  try{ const text=await sendToScript(payload); box.value='HTTP 200\n'+text; showToast('Test POST ok ✓'); }catch(e){ box.value=String(e); showToast('Test POST failed','error'); }
+}
+async function pullFromSheets(){
+  const box=el('#adm_msg'); if(!S.endpoint){ box.value='No endpoint configured'; return; }
+  try{
+    const url=S.endpoint+'?read=1&secret='+encodeURIComponent(S.secret||'');
+    const j=await fetch(url,{method:'GET'}).then(r=>r.json());
+    if(j && Array.isArray(j.visits) && Array.isArray(j.leads)){
+      j.visits.forEach(v=> S.visitsLog.push(v));
+      j.leads.forEach(l=>  S.leadsLog.push(l));
+      saveLS(); showToast('Pulled from Sheets ✓'); box.value='Pulled '+j.visits.length+' visits & '+j.leads.length+' leads';
+      window.dispatchEvent(new Event('knock:logged'));
+    }else{ box.value='Unexpected response'; showToast('Pull failed','error'); }
+  }catch(e){ box.value=String(e); showToast('Pull failed','error'); }
+}
+
+/* ===== Queue helpers ===== */
+async function retryQueue(){
+  if(!S.queue.length){ showToast('Queue empty','info'); return; }
+  const q=[...S.queue]; S.queue=[]; saveLS(); let sent=0,failed=0,last='';
+  for(const p of q){ try{ await sendToScript(p); sent++; }catch(e){ S.queue.push(p); failed++; last=String(e); } }
+  saveLS(); if(sent) showToast(`Synced ${sent} ✓`,'success');
+  if(failed) showToast(`${failed} still queued${last? ' ('+last+')':''}`,'info');
+}
+function clearQueue(){
+  if(!S.queue.length){ showToast('Queue already empty','info'); return; }
+  if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return;
+  S.queue=[]; saveLS(); showToast('Queue cleared ✓','success');
+}
+
+/* ===== Map (same as your last working version; omitted here for brevity) ===== */
+/* If you need me to paste the full renderMap() again, just say “renderMap full”. */
