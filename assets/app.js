@@ -1,7 +1,10 @@
-// v4.7.2-patch-005 — Map filters (Visits / Leads / Both), type styling (visits=solid, leads=ring)
-// Always capture GPS on knock; manual reverse lookup optional;
-// Next Door: Lead / Left Literature / Declined / Skip; photos removed;
-// Sheets read+write; Map shows color-coded history (Today, 1–7d, 8–29d, 30–89d, 90+).
+// v4.7.2-patch-007
+// - Always capture GPS on knock; manual reverse lookup optional
+// - Next Door: Lead / Left Literature / Declined / Skip (no photos)
+// - Sheets read+write; GET read for Pull from Sheets
+// - Map: filters (Visits / Leads / Both), type styling (visit=solid, lead=ring), age colors
+// - Map auto-refreshes after any visit/lead is saved via a "knock:logged" event
+// - Safe Leaflet re-init on tab re-entry
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -103,12 +106,14 @@ async function reverseLookup(){
     }
   }, ()=> showToast('Location error','error'));
 }
+
+/* --- ALWAYS capture GPS; emit 'knock:logged' so Map can auto-refresh --- */
 async function knockOutcome(outcome){
   const addr=(el('#k_addr')?.value||'').trim();
   const notes=(el('#k_notes')?.value||'').trim();
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
 
-  // Always attempt to capture GPS silently
+  // Silent GPS
   let lat=null, lon=null;
   if(navigator.geolocation){
     try{
@@ -116,7 +121,7 @@ async function knockOutcome(outcome){
       lat = pos.coords.latitude; lon = pos.coords.longitude;
     }catch(_){}
   }
-  // If manual reverse lookup was used, prefer those coords
+  // Prefer coords from manual lookup if present
   if(S.__lastGPS){ lat=S.__lastGPS.lat; lon=S.__lastGPS.lon; S.__lastGPS=null; }
 
   const item={ type: outcome==='Lead'?'lead':'visit',
@@ -128,12 +133,17 @@ async function knockOutcome(outcome){
   try{ await sendToScript({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
 
-  S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success');
+  S.visitsLog.push(item); saveLS();
+  showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success');
+
+  // 🔔 Notify the Map to refresh
+  window.dispatchEvent(new CustomEvent('knock:logged', { detail: item }));
+
   if(outcome==='Lead'){ S.__prefill={ address:addr, lat, lon }; go('lead'); }
   else { el('#k_addr').value=''; el('#k_notes').value=''; }
 }
 
-/* Lead (no photos) */
+/* Lead (no photos) — includes GPS and notifies the map */
 function renderLead(){
   const pf=S.__prefill||{}; delete S.__prefill;
   el('#view').innerHTML = `<section class="card"><h2>New Lead</h2>
@@ -153,12 +163,14 @@ async function saveLead(){
     name:(el('#l_name').value||'').trim(), phone:(el('#l_phone').value||'').trim(), email:(el('#l_email').value||'').trim(),
     address:(el('#l_addr').value||'').trim(), service:el('#l_service').value, urgency:el('#l_urgency').value,
     budget:el('#l_budget').value, notes:(el('#l_notes').value||'').trim(), rep:S.rep||'', source:'PWA',
-    lat:(S.__prefill&&typeof S.__prefill.lat==='number')?S.__prefill.lat:null,
-    lon:(S.__prefill&&typeof S.__prefill.lon==='number')?S.__prefill.lon:null };
+    lat:null, lon:null };
+
   if(!b.name){ showToast('Name required','error'); return; }
 
-  // if opened directly (no prefill), try GPS now
-  if(b.lat==null && navigator.geolocation){
+  // Prefer coords carried from Next Door if present, else try GPS now
+  if(S.__prefill && typeof S.__prefill.lat==='number' && typeof S.__prefill.lon==='number'){
+    b.lat = S.__prefill.lat; b.lon = S.__prefill.lon; S.__prefill = null;
+  }else if(navigator.geolocation){
     try{
       const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,timeout:4000}));
       b.lat = pos.coords.latitude; b.lon = pos.coords.longitude;
@@ -168,143 +180,16 @@ async function saveLead(){
   try{ await sendToScript({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
 
-  S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
+  S.leadsLog.push(b); saveLS();
+  showToast('Lead saved ✓','success');
+
+  // 🔔 Notify the Map to refresh (the backend also mirrors Lead into Visits)
+  window.dispatchEvent(new CustomEvent('knock:logged', { detail: b }));
+
+  go('dashboard');
 }
 
-/* Map: pulls visits from Sheet + local logs; filters; safe re-init */
-async function renderMap(){
-  el('#view').innerHTML = `
-    <section class="card">
-      <h2>Map — Knock History</h2>
-
-      <div class="field"><label>Type Filter</label>
-        <div class="pills" id="typePills">
-          <span class="pill active" data-mode="both">Both</span>
-          <span class="pill" data-mode="visits">Visits</span>
-          <span class="pill" data-mode="leads">Leads</span>
-        </div>
-      </div>
-
-      <div class="field"><label>Age Legend</label>
-        <div id="legend" style="display:flex;gap:.6rem;flex-wrap:wrap"></div>
-      </div>
-
-      <div id="map" class="map"></div>
-    </section>
-  `;
-
-  const COLORS = { today:'#22c55e', d1_7:'#3b82f6', d8_29:'#f59e0b', d30_89:'#ef4444', d90p:'#9ca3af' };
-  el('#legend').innerHTML = [
-    ['Today',COLORS.today],['1–7d',COLORS.d1_7],['8–29d',COLORS.d8_29],['30–89d',COLORS.d30_89],['90+ d',COLORS.d90p]
-  ].map(([label,color])=>`<span style="display:inline-flex;align-items:center;gap:.4rem"><span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #00000030"></span><small>${label}</small></span>`).join('');
-
-  let mode='both';
-  el('#typePills').querySelectorAll('.pill').forEach(p=>{
-    p.addEventListener('click',()=>{ el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active')); p.classList.add('active'); mode=p.getAttribute('data-mode'); draw(); });
-  });
-
-  // Pull from server
-  async function fetchServer(){
-    if(!S.endpoint) return {visits:[],leads:[]};
-    try{
-      const url=S.endpoint+'?read=1&secret='+encodeURIComponent(S.secret||'');
-      const j=await fetch(url,{method:'GET'}).then(r=>r.json());
-      if(j && j.visits && j.leads) return j;
-    }catch(_){}
-    return {visits:[],leads:[]};
-  }
-
-  function latestByAddress(arr){
-    const idx={};
-    for(const v of (arr||[])){
-      const a=(v.address||'').trim(); if(!a) continue;
-      const t=v.time||v.date||'';
-      if(!idx[a] || new Date(t)>new Date(idx[a].time||idx[a].date||0)) idx[a]=v;
-    }
-    return Object.values(idx);
-  }
-  function ageColor(iso){
-    const last=(iso||'').slice(0,10);
-    const days= last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : 9999;
-    if(days===0) return COLORS.today;
-    if(days<=7)  return COLORS.d1_7;
-    if(days>=90) return COLORS.d90p;
-    if(days>=30) return COLORS.d30_89;
-    return COLORS.d8_29;
-  }
-  const iconHTML=(color,type)=> type==='lead'
-    ? `<div style="width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:transparent;border:3px solid ${color};"></div>`
-    : `<div style="width:16px;height:16px;border-radius:50%;border:2px solid #00000080;background:${color};"></div>`;
-
-  // Merge: server + local (server already contains mirrored "Lead" visits)
-  const server = await fetchServer();
-
-  // Normalize server rows (make sure lat/lon are numbers)
-  const norm = r => {
-    const o = {...r};
-    o.lat = (typeof o.Lat==='number') ? o.Lat : (typeof o.lat==='number'?o.lat:null);
-    o.lon = (typeof o.Lon==='number') ? o.Lon : (typeof o.lon==='number'?o.lon:null);
-    o.date = o['Visit Date'] || o['Lead Date'] || o.date || '';
-    o.time = o['Visit Time'] || o['Lead Time'] || o.time || '';
-    o.address = o.Address || o.address || '';
-    o.outcome = o.Outcome || o.outcome || '';
-    return o;
-  };
-
-  const serverVisits = (server.visits||[]).map(norm);
-  const localVisits  = (S.visitsLog||[]).map(norm);
-  const allVisits = [...serverVisits, ...localVisits];
-
-  // For leads we may still want to include server leads that have lat/lon (belt & suspenders)
-  const serverLeads  = (server.leads||[]).map(r => {
-    const o = norm(r); o.outcome = 'Lead'; return o;
-  }).filter(o => typeof o.lat==='number' && typeof o.lon==='number');
-
-  const combinedVisits = latestByAddress(allVisits.filter(o => typeof o.lat==='number' && typeof o.lon==='number'));
-  const combinedLeads  = latestByAddress(serverLeads.concat((S.leadsLog||[]).map(norm).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')));
-
-  function collectPoints(){
-    const v = combinedVisits.map(o=>({ ...o, __type:'visit' }));
-    const l = combinedLeads .map(o=>({ ...o, __type:'lead'  }));
-    if(mode==='visits') return v;
-    if(mode==='leads')  return l;
-    return [...v, ...l];
-  }
-
-  function draw(){
-    if(!window.L){ showToast('Map library not loaded','error'); return; }
-    // Re-init safely
-    if(window.__map){ try{ window.__map.remove(); }catch(_){} window.__map=null; }
-    el('#map').innerHTML='';
-
-    const pts = collectPoints();
-    const map = L.map('map', {zoomControl:true}); window.__map = map;
-
-    const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
-    map.setView(start, pts[0]?15:12);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      maxZoom:19, attribution:'© OpenStreetMap'
-    }).addTo(map);
-
-    const bounds=[];
-    for(const p of pts){
-      const color = ageColor(p.time || p.date || '');
-      const icon  = new L.DivIcon({ className:'', html: iconHTML(color, p.__type) });
-      const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
-      const title=p.address||'';
-      const subtype = p.__type==='lead' ? 'Lead' : (p.outcome || 'Visit');
-      const subtitle = `${subtype} • ${new Date(p.time||p.date||'').toLocaleString()}`;
-      m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
-      bounds.push([p.lat,p.lon]);
-    }
-    if(bounds.length>1) map.fitBounds(bounds,{padding:[20,20]});
-  }
-
-  draw();
-}
-
-/* Lead tracker */
+/* Lead tracker (local) */
 function renderTracker(){
   el('#view').innerHTML = `<section class="card"><h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -323,7 +208,7 @@ function renderTracker(){
 
 /* Scripts */
 async function renderScripts(){
-  const SCRIPT_URL='assets/scripts.json?v=4723';
+  const SCRIPT_URL='assets/scripts.json?v=4727';
   let data=null; try{ data=await fetch(SCRIPT_URL,{cache:'no-store'}).then(r=>r.json()); }catch(_){ data=null; }
   data=data||{seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
   const m=new Date().getMonth()+1; const season=(m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
@@ -379,6 +264,8 @@ async function pullFromSheets(){
       j.visits.forEach(v=> S.visitsLog.push(v));
       j.leads.forEach(l=>  S.leadsLog.push(l));
       saveLS(); showToast('Pulled from Sheets ✓'); box.value='Pulled '+j.visits.length+' visits & '+j.leads.length+' leads';
+      // 🔔 If map is open, refresh it too
+      window.dispatchEvent(new Event('knock:logged'));
     }else{ box.value='Unexpected response'; showToast('Pull failed','error'); }
   }catch(e){ box.value=String(e); showToast('Pull failed','error'); }
 }
@@ -395,4 +282,159 @@ function clearQueue(){
   if(!S.queue.length){ showToast('Queue already empty','info'); return; }
   if(!confirm(`Discard ${S.queue.length} queued item(s)?`)) return;
   S.queue=[]; saveLS(); showToast('Queue cleared ✓','success');
+}
+
+/* ===================== MAP (with auto-refresh) ===================== */
+async function renderMap(){
+  el('#view').innerHTML = `
+    <section class="card">
+      <h2>Map — Knock History</h2>
+
+      <div class="field"><label>Type Filter</label>
+        <div class="pills" id="typePills">
+          <span class="pill active" data-mode="both">Both</span>
+          <span class="pill" data-mode="visits">Visits</span>
+          <span class="pill" data-mode="leads">Leads</span>
+        </div>
+      </div>
+
+      <div class="field"><label>Age Legend</label>
+        <div id="legend" style="display:flex;gap:.6rem;flex-wrap:wrap"></div>
+      </div>
+
+      <div id="map" class="map"></div>
+    </section>
+  `;
+
+  const COLORS = { today:'#22c55e', d1_7:'#3b82f6', d8_29:'#f59e0b', d30_89:'#ef4444', d90p:'#9ca3af' };
+  el('#legend').innerHTML = [
+    ['Today',COLORS.today],['1–7d',COLORS.d1_7],['8–29d',COLORS.d8_29],['30–89d',COLORS.d30_89],['90+ d',COLORS.d90p]
+  ].map(([label,color])=>`<span style="display:inline-flex;align-items:center;gap:.4rem"><span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #00000030"></span><small>${label}</small></span>`).join('');
+
+  let mode='both';
+
+  el('#typePills').querySelectorAll('.pill').forEach(p=>{
+    p.addEventListener('click',()=>{
+      el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      mode=p.getAttribute('data-mode');
+      controller.draw();
+    });
+  });
+
+  // ---- Data helpers ----
+  function latestByAddress(arr){
+    const idx={};
+    for(const v of (arr||[])){
+      const a=(v.address||'').trim(); if(!a) continue;
+      const t=v.time||v.date||'';
+      if(!idx[a] || new Date(t)>new Date(idx[a].time||idx[a].date||0)) idx[a]=v;
+    }
+    return Object.values(idx);
+  }
+  function ageColor(iso){
+    const last=(iso||'').slice(0,10);
+    const days= last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : 9999;
+    if(days===0) return COLORS.today;
+    if(days<=7)  return COLORS.d1_7;
+    if(days>=90) return COLORS.d90p;
+    if(days>=30) return COLORS.d30_89;
+    return COLORS.d8_29;
+  }
+  const iconHTML=(color,type)=> type==='lead'
+    ? `<div style="width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:transparent;border:3px solid ${color};"></div>`
+    : `<div style="width:16px;height:16px;border-radius:50%;border:2px solid #00000080;background:${color};"></div>`;
+
+  async function fetchServer(){
+    if(!S.endpoint) return {visits:[], leads:[]};
+    try{
+      const url=S.endpoint+'?read=1&secret='+encodeURIComponent(S.secret||'');
+      const j=await fetch(url,{method:'GET'}).then(r=>r.json());
+      if(j && j.visits && j.leads) return j;
+    }catch(_){}
+    return {visits:[], leads:[]};
+  }
+  const norm = r => {
+    const o = {...r};
+    o.lat = (typeof o.Lat==='number') ? o.Lat : (typeof o.lat==='number'?o.lat:null);
+    o.lon = (typeof o.Lon==='number') ? o.Lon : (typeof o.lon==='number'?o.lon:null);
+    o.date = o['Visit Date'] || o['Lead Date'] || o.date || '';
+    o.time = o['Visit Time'] || o['Lead Time'] || o.time || '';
+    o.address = o.Address || o.address || '';
+    o.outcome = o.Outcome || o.outcome || '';
+    return o;
+  };
+
+  async function rebuildData(){
+    const server = await fetchServer();
+    const serverVisits = (server.visits||[]).map(norm);
+    const localVisits  = (S.visitsLog||[]).map(norm);
+    const allVisits    = [...serverVisits, ...localVisits];
+
+    const serverLeads  = (server.leads||[]).map(r=>{ const o=norm(r); o.outcome='Lead'; return o; })
+                            .filter(o=>typeof o.lat==='number' && typeof o.lon==='number');
+    const combinedVisits = latestByAddress(allVisits.filter(o=>typeof o.lat==='number' && typeof o.lon==='number'));
+    const combinedLeads  = latestByAddress(serverLeads.concat((S.leadsLog||[]).map(norm).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')));
+
+    controller._visits = combinedVisits;
+    controller._leads  = combinedLeads;
+  }
+
+  function getPoints(){
+    const v = (controller._visits||[]).map(o=>({ ...o, __type:'visit' }));
+    const l = (controller._leads ||[]).map(o=>({ ...o, __type:'lead'  }));
+    if(mode==='visits') return v;
+    if(mode==='leads')  return l;
+    return [...v,...l];
+  }
+
+  function draw(){
+    if(!window.L){ showToast('Map library not loaded','error'); return; }
+    // Safe re-init
+    if(window.__map){ try{ window.__map.remove(); }catch(_){ } window.__map=null; }
+    el('#map').innerHTML='';
+
+    const pts = getPoints();
+    const map = L.map('map', {zoomControl:true}); window.__map = map;
+
+    const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
+    map.setView(start, pts[0]?15:12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19, attribution:'© OpenStreetMap'
+    }).addTo(map);
+
+    const bounds=[];
+    for(const p of pts){
+      const color = ageColor(p.time || p.date || '');
+      const icon  = new L.DivIcon({ className:'', html: iconHTML(color, p.__type) });
+      const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
+      const title=p.address||'';
+      const subtype = p.__type==='lead' ? 'Lead' : (p.outcome || 'Visit');
+      const subtitle = `${subtype} • ${new Date(p.time||p.date||'').toLocaleString()}`;
+      m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
+      bounds.push([p.lat,p.lon]);
+    }
+    if(bounds.length>1) map.fitBounds(bounds,{padding:[20,20]});
+  }
+
+  // Controller exposes methods so we can refresh from events
+  const controller = {
+    _visits: [], _leads: [],
+    async rebuild(){ await rebuildData(); },
+    draw
+  };
+  window.__mapController = controller;
+
+  // Listen once for "knock:logged" to refresh the map when new doors/leads are added
+  if(!window.__mapKnockListener){
+    window.__mapKnockListener = async ()=>{ 
+      if(window.__mapController){ await window.__mapController.rebuild(); window.__mapController.draw(); }
+    };
+    window.addEventListener('knock:logged', window.__mapKnockListener);
+  }
+
+  // Initial build
+  await controller.rebuild();
+  controller.draw();
 }
