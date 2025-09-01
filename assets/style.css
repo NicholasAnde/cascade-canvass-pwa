@@ -26,15 +26,8 @@ main{position:relative;padding:1rem;padding-top:calc(1rem + 56px);padding-bottom
 .field label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.3rem;letter-spacing:.02em;text-transform:uppercase;user-select:none}
 .field input,.field select,.field textarea{width:100%;background:transparent;color:var(--ink);border:0;outline:none;font-size:1rem}
 .field select{background:var(--field-bg);color:var(--ink);border-radius:10px;padding:.6rem 0}
-.field option{background:var(--field-bg);color:var(--ink)}
-/* Stacked buttons */
-.btn-row{display:flex;flex-direction:column;gap:calc(.6rem * var(--btn-scale));}
-button{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:14px;
-  padding: calc(.7rem * var(--btn-scale)) calc(1rem * var(--btn-scale));
-  font-size: calc(1rem * var(--btn-scale));
-  min-height: calc(48px * var(--btn-scale));
-  user-select:none;
-}
+.btn-row{display:flex;flex-direction:column;gap:calc(.6rem * var(--btn-scale))}
+button{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:calc(.7rem * var(--btn-scale)) calc(1rem * var(--btn-scale));font-size:calc(1rem * var(--btn-scale));min-height:calc(48px * var(--btn-scale));user-select:none}
 button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .foot{position:fixed;left:0;right:0;bottom:0;height:56px;display:flex;align-items:center;padding:0 1rem calc(var(--safe-bottom)/2);border-top:1px solid var(--line);background:var(--card);color:var(--muted);z-index:9}
 #toast-root{position:fixed;left:0;right:0;bottom:calc(56px + var(--safe-bottom));z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none;padding:0 12px}
