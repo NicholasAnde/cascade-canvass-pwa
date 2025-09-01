@@ -1,5 +1,7 @@
-// v4.7.2-patch-002 — Manual reverse lookup; Next Door (Lead / Left Literature / Declined / Skip);
-// photos removed; Sheets read+write; Map shows color-coded history (Today, 1–7d, 8–29d, 30–89d, 90+).
+// v4.7.2-patch-005 — Map filters (Visits / Leads / Both), type styling (visits=solid, leads=ring)
+// Always capture GPS on knock; manual reverse lookup optional;
+// Next Door: Lead / Left Literature / Declined / Skip; photos removed;
+// Sheets read+write; Map shows color-coded history (Today, 1–7d, 8–29d, 30–89d, 90+).
 
 window.S = window.S || {
   rep: localStorage.getItem('rep') || '',
@@ -71,7 +73,7 @@ function renderDashboard(){
   </section>`;
 }
 
-/* Next Door (manual reverse lookup; no auto anything) */
+/* Next Door (manual reverse lookup; always capture GPS on save) */
 function renderKnock(){
   el('#view').innerHTML = `<section class="card"><h2>Next Door</h2>
     <div class="field"><label>Address*</label><input id="k_addr" placeholder="1208 Maple St" autocomplete="street-address"></div>
@@ -105,16 +107,29 @@ async function knockOutcome(outcome){
   const addr=(el('#k_addr')?.value||'').trim();
   const notes=(el('#k_notes')?.value||'').trim();
   if(!addr){ showToast('Address required','error'); el('#k_addr')?.focus(); return; }
-  const gps = S.__lastGPS || {};
-  const item={ type: outcome==='Lead'?'lead':'visit', date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
+
+  // Always attempt to capture GPS silently
+  let lat=null, lon=null;
+  if(navigator.geolocation){
+    try{
+      const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,timeout:4000}));
+      lat = pos.coords.latitude; lon = pos.coords.longitude;
+    }catch(_){}
+  }
+  // If manual reverse lookup was used, prefer those coords
+  if(S.__lastGPS){ lat=S.__lastGPS.lat; lon=S.__lastGPS.lon; S.__lastGPS=null; }
+
+  const item={ type: outcome==='Lead'?'lead':'visit',
+    date:new Date().toISOString().slice(0,10), time:new Date().toISOString(),
     address:addr, name:'', phone:'', email:'', notes, rep:S.rep||'', source:'PWA',
     outcome: outcome==='Lead'? undefined : outcome, objection:'',
-    lat: (typeof gps.lat==='number')?gps.lat:null, lon: (typeof gps.lon==='number')?gps.lon:null };
-  S.__lastGPS = null;
+    lat, lon };
+
   try{ await sendToScript({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...item, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
+
   S.visitsLog.push(item); saveLS(); showToast((outcome==='Lead'?'Lead':'Visit')+' saved ✓','success');
-  if(outcome==='Lead'){ S.__prefill={ address:addr, lat:item.lat, lon:item.lon }; go('lead'); }
+  if(outcome==='Lead'){ S.__prefill={ address:addr, lat, lon }; go('lead'); }
   else { el('#k_addr').value=''; el('#k_notes').value=''; }
 }
 
@@ -141,22 +156,43 @@ async function saveLead(){
     lat:(S.__prefill&&typeof S.__prefill.lat==='number')?S.__prefill.lat:null,
     lon:(S.__prefill&&typeof S.__prefill.lon==='number')?S.__prefill.lon:null };
   if(!b.name){ showToast('Name required','error'); return; }
+
+  // if opened directly (no prefill), try GPS now
+  if(b.lat==null && navigator.geolocation){
+    try{
+      const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,timeout:4000}));
+      b.lat = pos.coords.latitude; b.lon = pos.coords.longitude;
+    }catch(_){}
+  }
+
   try{ await sendToScript({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
   catch(e){ S.queue.push({ ...b, secret:S.secret, emailNotifyTo:S.emailNotifyTo }); }
+
   S.leadsLog.push(b); saveLS(); showToast('Lead saved ✓','success'); go('dashboard');
 }
 
-/* Map: color-coded history by age */
+/* Map: filters + type styling */
 function renderMap(){
   el('#view').innerHTML = `
     <section class="card">
       <h2>Map — Knock History</h2>
-      <div class="field"><label>Legend</label>
+
+      <div class="field"><label>Type Filter</label>
+        <div class="pills" id="typePills">
+          <span class="pill active" data-mode="both">Both</span>
+          <span class="pill" data-mode="visits">Visits</span>
+          <span class="pill" data-mode="leads">Leads</span>
+        </div>
+      </div>
+
+      <div class="field"><label>Age Legend</label>
         <div id="legend" style="display:flex;gap:.6rem;flex-wrap:wrap"></div>
       </div>
+
       <div id="map" class="map"></div>
     </section>
   `;
+
   const COLORS = {
     today:  '#22c55e', // green
     d1_7:   '#3b82f6', // blue
@@ -177,40 +213,85 @@ function renderMap(){
     </span>
   `).join('');
 
-  // Most recent per address with coords
-  const lastByAddr = {};
-  for (const v of (S.visitsLog || [])){
-    const a=(v.address||'').trim(); if(!a) continue;
-    const t=v.time||v.date||''; if(!lastByAddr[a] || new Date(t)>new Date(lastByAddr[a].time||lastByAddr[a].date||0)) lastByAddr[a]=v;
+  let mode = 'both';
+  el('#typePills').querySelectorAll('.pill').forEach(p=>{
+    p.addEventListener('click',()=>{
+      el('#typePills').querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      mode = p.getAttribute('data-mode');
+      draw();
+    });
+  });
+
+  // latest per address for visits/leads separately
+  function latestByAddress(arr){
+    const idx={};
+    for(const v of (arr||[])){
+      const a=(v.address||'').trim(); if(!a) continue;
+      const t=v.time||v.date||''; if(!idx[a] || new Date(t)>new Date(idx[a].time||idx[a].date||0)) idx[a]=v;
+    }
+    return Object.values(idx);
   }
-  const points = Object.values(lastByAddr).filter(v => typeof v.lat==='number' && typeof v.lon==='number');
 
-  if(!window.L){ showToast('Map library not loaded','error'); return; }
-  const map = L.map('map', {zoomControl:true});
-  const start = points[0] ? [points[0].lat, points[0].lon] : [45.64,-122.67];
-  map.setView(start, points[0]?15:12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-
-  const bounds=[];
-  const daysSince = iso => Math.floor((Date.now() - new Date(iso).getTime())/86400000);
-  for (const p of points){
-    const lastIso=(p.time||p.date||'').slice(0,10);
-    const age=lastIso?daysSince(lastIso):9999;
-    let color = COLORS.d8_29;
-    if (age===0)      color=COLORS.today;
-    else if (age<=7)  color=COLORS.d1_7;
-    else if (age>=90) color=COLORS.d90p;
-    else if (age>=30) color=COLORS.d30_89;
-
-    const icon = new L.DivIcon({className:'', html:`<div style="width:14px;height:14px;border-radius:50%;border:2px solid #000;background:${color}"></div>`});
-    const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
-    m.bindPopup(`<b>${p.address||''}</b><br/><small>${(p.outcome||'Visit')} • ${new Date(p.time||p.date||'').toLocaleString()}</small>`);
-    bounds.push([p.lat,p.lon]);
+  function collectPoints(){
+    const v = latestByAddress(S.visitsLog).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
+                  .map(o=>({...o, __type:'visit'}));
+    const l = latestByAddress(S.leadsLog ).filter(o=>typeof o.lat==='number'&&typeof o.lon==='number')
+                  .map(o=>({...o, __type:'lead'}));
+    if(mode==='visits') return v;
+    if(mode==='leads')  return l;
+    return [...v,...l];
   }
-  if(bounds.length>1) map.fitBounds(bounds,{padding:[20,20]});
+
+  function ageColor(iso){
+    const daysSince = x => Math.floor((Date.now()-new Date(x).getTime())/86400000);
+    const lastIso = (iso||'').slice(0,10);
+    const age = lastIso ? daysSince(lastIso) : 9999;
+    if (age===0)      return COLORS.today;
+    if (age<=7)       return COLORS.d1_7;
+    if (age>=90)      return COLORS.d90p;
+    if (age>=30)      return COLORS.d30_89;
+    return COLORS.d8_29;
+  }
+
+  function iconHTML(color, type){
+    // visit = solid, lead = ring (hollow)
+    if (type==='lead') {
+      return `<div style="width:16px;height:16px;border-radius:50%;
+                          box-sizing:border-box; background:transparent;
+                          border:3px solid ${color};"></div>`;
+    }
+    // visit
+    return `<div style="width:16px;height:16px;border-radius:50%;
+                        border:2px solid #00000080; background:${color};"></div>`;
+  }
+
+  function draw(){
+    if(!window.L){ showToast('Map library not loaded','error'); return; }
+    el('#map').innerHTML='';
+    const pts = collectPoints();
+    const map = L.map('map', {zoomControl:true});
+    const start = pts[0] ? [pts[0].lat, pts[0].lon] : [45.64,-122.67];
+    map.setView(start, pts[0]?15:12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+
+    const bounds=[];
+    for(const p of pts){
+      const color = ageColor(p.time || p.date || '');
+      const icon = new L.DivIcon({ className:'', html: iconHTML(color, p.__type) });
+      const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
+      const title=p.address||'';
+      const subtitle = `${(p.outcome||p.__type==='lead'?'Lead':'Visit')} • ${new Date(p.time||p.date||'').toLocaleString()}`;
+      m.bindPopup(`<b>${title}</b><br/><small>${subtitle}</small>`);
+      bounds.push([p.lat,p.lon]);
+    }
+    if(bounds.length>1) map.fitBounds(bounds,{padding:[20,20]});
+  }
+
+  draw();
 }
 
-/* Lead tracker (local) */
+/* Lead tracker */
 function renderTracker(){
   el('#view').innerHTML = `<section class="card"><h2>Lead Tracker</h2><div id="lt_list"></div></section>`;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -229,7 +310,7 @@ function renderTracker(){
 
 /* Scripts */
 async function renderScripts(){
-  const SCRIPT_URL='assets/scripts.json?v=4722';
+  const SCRIPT_URL='assets/scripts.json?v=4723';
   let data=null; try{ data=await fetch(SCRIPT_URL,{cache:'no-store'}).then(r=>r.json()); }catch(_){ data=null; }
   data=data||{seasons:{},audience:{},core:{opener:'',ask:'',close:''},rebuttals:{}};
   const m=new Date().getMonth()+1; const season=(m>=3&&m<=5)?'Spring':(m>=6&&m<=8)?'Summer':(m>=9&&m<=11)?'Fall':'Winter';
