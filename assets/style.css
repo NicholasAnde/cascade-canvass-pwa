@@ -39,3 +39,11 @@ button.primary{background:var(--accent);color:var(--accent-ink);border:0}
 .pills{display:flex;gap:.5rem}
 .pill{padding:.4rem .7rem;border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none}
 .pill.active{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* === KPI grid === */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:1rem .9rem;display:flex;flex-direction:column;justify-content:space-between;min-height:110px}
+.kpi .kpi-top{display:flex;align-items:center;gap:.5rem;color:#c7cbd1;font-size:.9rem}
+.kpi .kpi-value{font-weight:800;font-size:2.4rem;line-height:1.05;margin-top:.25rem}
+.kpi .kpi-sub{color:var(--muted);font-size:1rem;margin-top:.25rem}
+@media (max-width:700px){ .kpis{grid-template-columns:1fr;}}
