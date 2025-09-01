@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#111111"/>
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
-  <link rel="stylesheet" href="assets/style.css?v=472"/>
+  <link rel="stylesheet" href="assets/style.css?v=4722"/>
 </head>
 <body>
   <header class="topbar">
@@ -18,20 +18,19 @@
 
   <aside id="drawer" class="drawer" aria-hidden="true">
     <header>Menu</header>
-<nav class="nav">
-  <a href="#" onclick="nav('dashboard')">Home</a>
-  <a href="#" onclick="nav('knock')">Next Door</a>
-  <a href="#" onclick="nav('map')">Map</a>            <!-- ensure this line exists -->
-  <a href="#" onclick="nav('lead')">New Lead</a>
-  <a href="#" onclick="nav('tracker')">Lead Tracker</a>
-  <a href="#" onclick="nav('scripts')">Scripts</a>
-  <a href="#" onclick="nav('settings')">Settings</a>
-</nav>
-
+    <nav class="nav">
+      <a href="#" onclick="nav('dashboard')">Home</a>
+      <a href="#" onclick="nav('knock')">Next Door</a>
+      <a href="#" onclick="nav('map')">Map</a>
+      <a href="#" onclick="nav('lead')">New Lead</a>
+      <a href="#" onclick="nav('tracker')">Lead Tracker</a>
+      <a href="#" onclick="nav('scripts')">Scripts</a>
+      <a href="#" onclick="nav('settings')">Settings</a>
+    </nav>
   </aside>
 
   <main id="view"></main>
-  <footer class="foot"><small>Mobile PWA • v4.7.2-patch</small></footer>
+  <footer class="foot"><small>Mobile PWA • v4.7.2-patch-002</small></footer>
 
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
@@ -52,6 +51,6 @@
     });
     document.addEventListener('DOMContentLoaded', ()=> window.go ? go('dashboard') : (document.getElementById('view').innerHTML='<section class="card"><h2>Loading…</h2></section>'));
   </script>
-  <script src="assets/app.js?v=472"></script>
+  <script src="assets/app.js?v=4722"></script>
 </body>
 </html>
