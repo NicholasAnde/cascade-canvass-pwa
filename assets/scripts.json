@@ -1,0 +1,28 @@
+{
+  "seasons": {
+    "Spring": "We’re helping neighbors get ahead of spring growth so trees don’t overtake the yard.",
+    "Summer": "With heat drying heavy limbs, folks are trimming before they snap.",
+    "Fall":   "We’re storm-proofing trees before wind and rain hit.",
+    "Winter": "After these storms, we’re checking weakened branches and hazards."
+  },
+  "audience": {
+    "General": "",
+    "Pros": "Most people hire us because it’s faster than a weekend on a ladder.",
+    "Retirees": "Peace of mind is the big win—no surprises when wind picks up."
+  },
+  "core": {
+    "opener": "Hi, I’m Nick with Cascade Tree Works. Quick question—",
+    "ask":    "—any trees you’ve been meaning to trim or check before the weather?",
+    "close":  "Great—what’s the best name and number for a free quote?"
+  },
+  "rebuttals": {
+    "Already have someone": {
+      "A": "That’s great—most folks like a second opinion for comparison.",
+      "B": "We often help even if you’ve got a regular—especially for storm prep."
+    },
+    "Not interested": {
+      "A": "All good—I’ll leave our info in case a limb acts up.",
+      "B": "Understood—calls jump after a gusty night; we’d rather prevent it."
+    }
+  }
+}
