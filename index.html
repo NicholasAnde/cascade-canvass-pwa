@@ -10,11 +10,11 @@
   <link rel="icon" href="icons/favicon.png"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 
-  <!-- Leaflet CSS (required for map tiles/controls) -->
+  <!-- Leaflet CSS (map) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-  <!-- App CSS -->
-  <link rel="stylesheet" href="assets/style.css?v=4723"/>
+  <!-- App CSS (cache-busted) -->
+  <link rel="stylesheet" href="assets/style.css?v=4729"/>
 </head>
 <body>
   <header class="topbar">
@@ -36,7 +36,7 @@
   </aside>
 
   <main id="view"></main>
-  <footer class="foot"><small>Mobile PWA • v4.7.2-patch-003</small></footer>
+  <footer class="foot"><small>Mobile PWA • v4.7.2-patch-009</small></footer>
 
   <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
   <div id="err" class="err" style="display:none"></div>
@@ -49,7 +49,6 @@
     }
     function nav(tab){ toggleDrawer(); if(window.go) go(tab); }
 
-    // ensure no stale SW caches
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r=>r.unregister())).catch(()=>{});
     }
@@ -66,10 +65,10 @@
     });
   </script>
 
-  <!-- Leaflet JS MUST be loaded before app.js so window.L exists -->
+  <!-- Leaflet JS (must come before app.js) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- App JS -->
-  <script src="assets/app.js?v=4723"></script>
+  <!-- App JS (cache-busted) -->
+  <script src="assets/app.js?v=4729"></script>
 </body>
 </html>
